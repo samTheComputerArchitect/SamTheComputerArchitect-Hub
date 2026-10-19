@@ -1,0 +1,718 @@
+{% extends 'base.html' %}
+
+{% load static research_tags %}
+
+{% block page_name %}Research{% endblock %}
+
+{% block page_header_right %}
+    <button type="button" class="add-research-btn" id="add-research-btn">+ New Project</button>
+{% endblock %}
+
+{% block content %}
+<style>
+    .research-filters {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px 28px;
+        padding: 0 0 20px 150px;
+    }
+    .research-filter-groups {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px 28px;
+    }
+    .research-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+    }
+    .research-search input[type="search"] {
+        width: 280px;
+        height: 28px;
+        padding: 0 10px;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        color: var(--text-primary);
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        transition: border-color 0.15s, opacity 0.15s;
+    }
+    .research-search input[type="search"]::placeholder {
+        color: var(--text-muted);
+    }
+    .research-search input[type="search"]:focus {
+        outline: none;
+        border-color: var(--color-primary);
+    }
+    .research-search.busy input[type="search"] {
+        border-color: var(--color-primary);
+        opacity: 0.65;
+    }
+    .research-summary {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+        padding-left: 150px;
+    }
+    .research-summary strong {
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+    .link-button {
+        background: none;
+        border: none;
+        padding: 0;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        color: var(--color-primary);
+        cursor: pointer;
+        text-decoration: underline;
+    }
+    .link-button:hover {
+        color: var(--color-primary-light);
+    }
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    @media (max-width: 1060px) {
+        .research-search {
+            margin-left: 0;
+        }
+    }    .filter-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+    }
+    .filter-chips {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 12px;
+        font-size: 12px;
+        font-family: var(--font-sans);
+        color: var(--text-secondary);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .filter-chip:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .filter-chip.active {
+        color: var(--bg-primary);
+        background: var(--chip-color, var(--color-primary));
+        border-color: var(--chip-color, var(--color-primary));
+        font-weight: 600;
+    }
+    .filter-chip .chip-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--chip-color, var(--color-primary));
+    }
+    .filter-chip.active .chip-dot {
+        background: var(--bg-primary);
+    }
+    .research-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 300px));
+        gap: 20px;
+        justify-content: start;
+        padding: 0 150px;
+    }
+    @media (max-width: 1450px) {
+        .research-grid {
+            grid-template-columns: repeat(3, minmax(0, 300px));
+        }
+    }
+    @media (max-width: 1060px) {
+        .research-grid {
+            grid-template-columns: repeat(2, minmax(0, 300px));
+        }
+        .research-filters {
+            padding-left: 0;
+        }
+    }
+    @media (max-width: 680px) {
+        .research-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+    .research-card {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 20px 18px;
+        min-height: 168px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        position: relative;
+        transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+        overflow: hidden;
+    }
+    .research-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--color-primary);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+    }
+    /* The whole card is one link (a stretched pseudo element on the title),
+       so every part of the card can be clicked. Only the tag chips, the
+       status badge and the delete button sit above it and stay interactive. */
+    .research-card-link {
+        color: inherit;
+        text-decoration: none;
+    }
+    .research-card-link::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+    }
+    .research-chips,
+    .research-delete {
+        position: relative;
+        z-index: 2;
+    }
+    .research-card:hover .research-acronym {
+        color: var(--color-primary);
+    }
+    .research-acronym {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--text-primary);
+        letter-spacing: 0.02em;
+        overflow-wrap: break-word;
+        word-break: normal;
+        padding-right: 34px;
+    }
+    .research-card:hover .research-acronym {
+        color: var(--color-primary);
+    }
+    .research-full-form {
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--text-secondary);
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+    .research-description {
+        margin-top: auto;
+        padding-top: 10px;
+        border-top: 1px solid var(--border-light);
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--text-muted);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+    .research-empty {
+        grid-column: 1 / -1;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.6;
+        padding: 30px 6px;
+    }
+    .research-card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .research-chips {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .research-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 8px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: var(--font-sans);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        color: var(--tag-color, var(--color-primary));
+        background: var(--tag-bg, rgba(82, 148, 226, 0.12));
+        border: 1px solid var(--tag-border, rgba(82, 148, 226, 0.4));
+        text-decoration: none;
+        cursor: pointer;
+        transition: filter 0.15s, background 0.15s;
+    }
+    .research-tag:hover {
+        filter: brightness(1.35);
+    }
+    .research-tag .tag-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--tag-color, var(--color-primary));
+    }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 8px;
+        font-family: var(--font-sans);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        color: var(--status-color, var(--text-secondary));
+        background: var(--status-bg, var(--bg-primary));
+        border: 1px solid var(--status-border, var(--border));
+        cursor: pointer;
+        transition: filter 0.15s;
+    }
+    .status-badge:hover {
+        filter: brightness(1.35);
+    }
+    .status-badge:focus-visible {
+        outline: 1px solid var(--status-color, var(--color-primary));
+        outline-offset: 1px;
+    }
+    .status-badge .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--status-color, var(--text-secondary));
+    }
+    .status-badge[data-status="active"] {
+        --status-color: {{ status_colors.active }};
+        --status-bg: {{ status_colors.active }}22;
+        --status-border: {{ status_colors.active }}66;
+    }
+    .status-badge[data-status="paused"] {
+        --status-color: {{ status_colors.paused }};
+        --status-bg: {{ status_colors.paused }}22;
+        --status-border: {{ status_colors.paused }}66;
+    }
+    .status-badge[data-status="finished"] {
+        --status-color: {{ status_colors.finished }};
+        --status-bg: {{ status_colors.finished }}22;
+        --status-border: {{ status_colors.finished }}66;
+    }
+    .status-picker {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .status-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 30px;
+        padding: 0 14px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg-primary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .status-option .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--status-color, var(--text-secondary));
+    }
+    .status-option.checked {
+        color: var(--status-color, var(--color-primary));
+        border-color: var(--status-color, var(--color-primary));
+        background: var(--status-bg, var(--bg-secondary));
+    }
+    .modal-hint {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+    }
+    .research-delete {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        background: none;
+        border: none;
+        color: var(--text-nav);
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s, color 0.15s;
+    }
+    .research-card:hover .research-delete {
+        opacity: 1;
+    }
+    .research-delete:hover {
+        color: var(--color-danger);
+    }
+    .add-research-btn {
+        background: var(--color-primary);
+        color: var(--bg-primary);
+        border: none;
+        padding: 6px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: opacity 0.15s;
+    }
+    .add-research-btn:hover {
+        opacity: 0.9;
+    }
+    .tag-picker {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .tag-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 10px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg-primary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .tag-option input {
+        display: none;
+    }
+    .tag-option .tag-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--tag-color, var(--color-primary));
+    }
+    .tag-option.checked {
+        color: var(--tag-color, var(--color-primary));
+        border-color: var(--tag-color, var(--color-primary));
+        background: var(--bg-secondary);
+    }
+</style>
+
+<div class="research-filters">
+    <div class="research-filter-groups" id="research-filter-groups">
+        <div class="filter-group">
+            <span class="filter-label">Tag</span>
+            <div class="filter-chips">
+                <button type="button" class="filter-chip{% if not active_tag %} active{% endif %}" data-filter-tag="">All</button>
+                {% for tag in tags %}
+                    <button type="button" class="filter-chip{% if active_tag == tag.slug %} active{% endif %}" data-filter-tag="{{ tag.slug }}" style="--chip-color: {{ tag.color }}">
+                        <span class="chip-dot"></span>{{ tag.name }}
+                    </button>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Status</span>
+            <div class="filter-chips">
+                <button type="button" class="filter-chip{% if not active_status %} active{% endif %}" data-filter-status="">All</button>
+                {% for value, label in status_choices %}
+                    <button type="button" class="filter-chip{% if active_status == value %} active{% endif %}" data-filter-status="{{ value }}" style="--chip-color: {{ status_colors|get_item:value }}">
+                        <span class="chip-dot"></span>{{ label }}
+                    </button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <form class="research-search" id="research-search" method="get" action="{% url 'research' %}" role="search">
+        <input type="hidden" name="tag" value="{{ active_tag }}">
+        <input type="hidden" name="status" value="{{ active_status }}">
+        <input type="search" id="research-search-input" name="q" value="{{ query }}" maxlength="100" placeholder="Search projects…" aria-label="Search research projects" autocomplete="off">
+    </form>
+</div>
+
+<div class="research-results" id="research-results">
+    {% if query %}
+        <div class="research-summary">
+            <strong>{{ projects|length }}</strong> project{{ projects|length|pluralize }} matching &ldquo;{{ query }}&rdquo;
+            &middot; <button type="button" class="link-button" id="clear-search">clear search</button>
+        </div>
+    {% endif %}
+
+    <div class="research-grid" id="research-grid">
+        {% for project in projects %}
+            <div class="research-card" data-id="{{ project.id }}">
+                <div class="research-card-top">
+                    <a class="research-card-link" href="{% url 'research_project' project.id %}">
+                        <span class="research-acronym">{{ project.acronym }}</span>
+                    </a>
+                    <button type="button" class="research-delete" data-id="{{ project.id }}" aria-label="Delete project" title="Delete project">&times;</button>
+                </div>
+                <span class="research-full-form">{{ project.full_form }}</span>
+                <span class="research-description" title="{{ project.description }}">{{ project.description|truncate_chars:description_limit }}</span>
+                <div class="research-chips">
+                    <button type="button" class="status-badge" data-id="{{ project.id }}" data-status="{{ project.status }}" data-acronym="{{ project.acronym }}" title="Change status" aria-label="Change status of {{ project.acronym }}">
+                        <span class="status-dot"></span><span class="status-label">{{ project.get_status_display }}</span>
+                    </button>
+                    {% for tag in project.tags.all %}
+                        <button type="button" class="research-tag" data-filter-tag="{{ tag.slug }}" style="--tag-color: {{ tag.color }}; --tag-bg: {{ tag.color }}22; --tag-border: {{ tag.color }}66" title="Filter by {{ tag.name }}">
+                            <span class="tag-dot"></span>{{ tag.name }}
+                        </button>
+                    {% endfor %}
+                </div>
+            </div>
+        {% empty %}
+            <div class="research-empty">
+                {% if query %}
+                    No projects match &ldquo;{{ query }}&rdquo;. Try another search or clear the filters.
+                {% else %}
+                    No research projects yet. Create one to start tracking what you are working on.
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+{{ status_colors|json_script:"status-colors" }}
+<script>
+    window.RESEARCH_CREATE_URL = "{% url 'research_create' %}";
+    window.RESEARCH_UPDATE_URL = "{% url 'research_update' %}";
+    window.RESEARCH_DELETE_URL = "{% url 'research_delete' %}";
+</script>
+<script src="{% static 'js/research-common.js' %}"></script>
+
+<script>
+    const addBtn = document.getElementById('add-research-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', function () {
+            showModal('New Research Project', `
+                <div class="form-group">
+                    <label>Acronym</label>
+                    <input type="text" id="research-acronym" maxlength="32" placeholder="e.g. CUDA" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;">
+                </div>
+                <div class="form-group">
+                    <label>Full form</label>
+                    <input type="text" id="research-full-form" maxlength="255" placeholder="Compute Unified Device Architecture" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="research-description" rows="3" placeholder="What is this project about?" style="width:100%; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="research-status" class="panel-select" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:0 8px;">
+                        {% for value, label in status_choices %}
+                            <option value="{{ value }}"{% if value == 'active' %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tags</label>
+                    <div class="tag-picker" id="research-tag-picker">
+                        {% for tag in tags %}
+                            <label class="tag-option" data-tag="{{ tag.slug }}" style="--tag-color: {{ tag.color }}">
+                                <input type="checkbox" name="tags" value="{{ tag.slug }}">
+                                <span class="tag-dot"></span>{{ tag.name }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            `, [
+                { text: 'Cancel', className: 'modal-btn' },
+                {
+                    text: 'Create',
+                    className: 'modal-btn modal-btn-primary',
+                    callback: async () => {
+                        const acronymField = document.getElementById('research-acronym');
+                        const formField = document.getElementById('research-full-form');
+                        const descriptionField = document.getElementById('research-description');
+                        const statusField = document.getElementById('research-status');
+                        const acronym = acronymField ? acronymField.value.trim() : '';
+                        const fullForm = formField ? formField.value.trim() : '';
+                        if (!acronym || !fullForm) {
+                            showModal('Error', 'Acronym and full form are required');
+                            return;
+                        }
+                        const selectedTags = Array.from(
+                            document.querySelectorAll('#research-tag-picker input[type="checkbox"]:checked')
+                        ).map(function (input) { return input.value; });
+                        try {
+                            const result = await postResearch(RESEARCH_CREATE_URL, {
+                                acronym: acronym,
+                                full_form: fullForm,
+                                description: descriptionField ? descriptionField.value.trim() : '',
+                                status: statusField ? statusField.value : 'active',
+                                tags: selectedTags,
+                            });
+                            if (result.ok) {
+                                window.location.reload();
+                            } else {
+                                showModal('Error', escapeHtml((result.data && result.data.error) || 'Failed to create project'));
+                            }
+                        } catch (e) {
+                            showModal('Error', 'An error occurred');
+                        }
+                    }
+                }
+            ]);
+        });
+    }
+
+    // Tag picker (inside the "new project" modal) - delegated, because the
+    // options only exist once the modal has been rendered.
+    document.addEventListener('change', function (e) {
+        const input = e.target;
+        if (!input || !input.matches || !input.matches('.tag-option input')) return;
+        const option = input.closest('.tag-option');
+        if (option) option.classList.toggle('checked', input.checked);
+    });
+
+    // ------------------------------------------------------------- filtering
+    // Search, tag and status filtering all happen in place: the result area
+    // is swapped out with fresh markup, the address bar is never touched.
+    const searchForm = document.getElementById('research-search');
+    const searchInput = document.getElementById('research-search-input');
+
+    const filters = {
+        tag: '{{ active_tag|escapejs }}',
+        status: '{{ active_status|escapejs }}',
+        query: '{{ query|escapejs }}',
+    };
+
+    let searchTimer = null;
+    let searchController = null;
+    let searchSeq = 0;
+
+    function applySearchResults(html) {
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        const groups = parsed.getElementById('research-filter-groups');
+        const results = parsed.getElementById('research-results');
+        const liveGroups = document.getElementById('research-filter-groups');
+        const liveResults = document.getElementById('research-results');
+        if (groups && liveGroups) liveGroups.replaceWith(groups);
+        if (results && liveResults) liveResults.replaceWith(results);
+    }
+
+    function runSearch() {
+        const seq = ++searchSeq;
+        const params = new URLSearchParams();
+        if (filters.tag) params.set('tag', filters.tag);
+        if (filters.status) params.set('status', filters.status);
+        if (filters.query) params.set('q', filters.query);
+        const query = params.toString();
+        const url = window.location.pathname + (query ? '?' + query : '');
+
+        if (searchController) searchController.abort();
+        searchController = new AbortController();
+        if (searchForm) searchForm.classList.add('busy');
+
+        fetch(url, {
+            signal: searchController.signal,
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(function (response) { return response.text(); })
+            .then(function (html) {
+                applySearchResults(html);
+            })
+            .catch(function (err) {
+                if (!err || err.name !== 'AbortError') {
+                    console.error('Filtering failed', err);
+                }
+            })
+            .then(function () {
+                if (seq === searchSeq && searchForm) searchForm.classList.remove('busy');
+            });
+    }
+
+    function scheduleSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(runSearch, 180);
+    }
+
+    if (searchInput) {
+        // "input" covers typing, deleting, pasting, cutting and autofill.
+        searchInput.addEventListener('input', function () {
+            filters.query = searchInput.value;
+            scheduleSearch();
+        });
+        searchInput.addEventListener('search', function () {
+            filters.query = searchInput.value;
+            scheduleSearch();
+        });
+    }
+
+    if (searchForm) {
+        searchForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            filters.query = searchInput ? searchInput.value : '';
+            clearTimeout(searchTimer);
+            runSearch();
+        });
+    }
+
+    // Tag + status chips filter in place as well.
+    document.addEventListener('click', function (e) {
+        const target = e.target.closest ? e.target.closest('[data-filter-tag], [data-filter-status]') : null;
+        if (!target) return;
+        e.preventDefault();
+        if (target.hasAttribute('data-filter-tag')) {
+            filters.tag = target.dataset.filterTag || '';
+        } else {
+            filters.status = target.dataset.filterStatus || '';
+        }
+        clearTimeout(searchTimer);
+        runSearch();
+    });
+
+    // Clear the search from the results summary.
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest ? e.target.closest('#clear-search') : null;
+        if (!btn) return;
+        e.preventDefault();
+        filters.query = '';
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.focus();
+        }
+        clearTimeout(searchTimer);
+        runSearch();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Thumbnails{% endblock %}
+
+{% block page_header_right %}
+    <button type="button" class="add-thumbnail-btn" id="add-thumbnail-btn">+ New Thumbnail</button>
+{% endblock %}
+
+{% block content %}
+<style>
+    .thumbnail-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 300px));
+        gap: 20px;
+        justify-content: start;
+        padding: 0 150px;
+    }
+    @media (max-width: 1450px) {
+        .thumbnail-grid {
+            grid-template-columns: repeat(3, minmax(0, 300px));
+        }
+    }
+    @media (max-width: 1060px) {
+        .thumbnail-grid {
+            grid-template-columns: repeat(2, minmax(0, 300px));
+        }
+    }
+    @media (max-width: 680px) {
+        .thumbnail-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+    .thumbnail-card {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        transition: transform 0.15s, border-color 0.15s;
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        cursor: pointer;
+    }
+    .thumbnail-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--color-primary);
+    }
+    .thumbnail-img-wrapper {
+        aspect-ratio: 16 / 9;
+        background: #ffffff;
+        border: 1px solid var(--border-light);
+        line-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .thumbnail-img {
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+    }
+    .thumbnail-empty {
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .thumbnail-info {
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 14px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        border-top: 1px solid var(--border);
+        background: #1a1a1a;
+    }
+    .thumbnail-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+        min-width: 0;
+    }
+    .info-btn {
+        padding: 8px;
+        font-size: 16px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        color: var(--text-nav);
+        transition: color 0.15s;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .info-btn:hover {
+        color: var(--color-primary);
+    }
+    .add-thumbnail-btn {
+        background: var(--color-primary);
+        color: var(--bg-primary);
+        border: none;
+        padding: 6px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: opacity 0.15s;
+    }
+    .add-thumbnail-btn:hover {
+        opacity: 0.9;
+    }
+</style>
+
+<div class="thumbnail-grid">
+    {% for item in thumb_items %}
+        <div class="thumbnail-card" data-id="{{ item.thumb.id }}" data-href="{% url 'thumbnail_editor' item.thumb.id %}">
+            <div class="thumbnail-img-wrapper">
+                {% if item.preview_url %}
+                    <img src="{{ item.preview_url }}" class="thumbnail-img" alt="{{ item.thumb.name|default:'Untitled' }}">
+                {% else %}
+                    <span class="thumbnail-empty">Empty thumbnail</span>
+                {% endif %}
+            </div>
+            <div class="thumbnail-info">
+                <span class="thumbnail-title" title="{{ item.thumb.name|default:'Untitled' }}">{{ item.thumb.name|default:"Untitled" }}</span>
+                <div style="display:flex; gap:12px;">
+                    <button type="button" class="info-btn" data-action="rename" data-id="{{ item.thumb.id }}" data-name="{{ item.thumb.name|default:'' }}" title="Rename">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
+                    </button>
+                    <button type="button" class="info-btn" data-action="duplicate" data-id="{{ item.thumb.id }}" title="Duplicate">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h9"></path></svg>
+                    </button>
+                    <button type="button" class="info-btn" data-action="delete" data-id="{{ item.thumb.id }}" title="Delete">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+
+</div>
+
+<script>
+    const CREATE_URL = "{% url 'create_thumbnail' %}";
+    const DELETE_URL = "{% url 'delete_thumbnail' %}";
+    const DUPLICATE_URL = "{% url 'duplicate_thumbnail' %}";
+    const RENAME_URL = "{% url 'rename_thumbnail' %}";
+    const CSRF_TOKEN = '{{ csrf_token }}';
+
+    async function postForm(url, fields) {
+        const body = new URLSearchParams();
+        Object.keys(fields).forEach(function (key) {
+            body.append(key, fields[key]);
+        });
+        body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': CSRF_TOKEN,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+        });
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = null;
+        }
+        return { ok: response.ok, status: response.status, data: data };
+    }
+
+    function reportError(result, fallback) {
+        const message = (result && result.data && result.data.error) ? result.data.error : fallback;
+        showModal('Error', escapeHtml(message));
+    }
+
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value === undefined || value === null ? '' : String(value);
+        return div.innerHTML;
+    }
+
+    document.getElementById('add-thumbnail-btn').addEventListener('click', function() {
+        showModal('New Thumbnail', `
+            <div class="form-group">
+                <label>Thumbnail Name</label>
+                <input type="text" id="thumb-name" class="api-key-field" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;" placeholder="Enter name...">
+            </div>
+        `, [
+            {
+                text: 'Cancel',
+                className: 'modal-btn',
+                callback: () => {}
+            },
+            {
+                text: 'Create',
+                className: 'modal-btn modal-btn-primary',
+                callback: async () => {
+                    const input = document.getElementById('thumb-name');
+                    const name = input ? input.value.trim() : '';
+                    if (!name) {
+                        showModal('Error', 'Please enter a name');
+                        return;
+                    }
+                    try {
+                        const result = await postForm(CREATE_URL, { name: name });
+                        if (result.ok && result.data && result.data.url) {
+                            window.location.href = result.data.url;
+                        } else {
+                            reportError(result, 'Failed to create thumbnail');
+                        }
+                    } catch (e) {
+                        showModal('Error', 'An error occurred');
+                    }
+                }
+            }
+        ]);
+    });
+
+    document.querySelectorAll('.thumbnail-card').forEach(function (card) {
+        card.addEventListener('click', function (e) {
+            if (e.target.closest('.info-btn')) return;
+            if (card.dataset.href) window.location.href = card.dataset.href;
+        });
+    });
+
+    document.querySelectorAll('.info-btn[data-action]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            if (btn.dataset.action === 'rename') renameThumbnail(id, btn.dataset.name || '');
+            else if (btn.dataset.action === 'duplicate') duplicateThumbnail(id);
+            else if (btn.dataset.action === 'delete') deleteThumbnail(id);
+        });
+    });
+
+    async function duplicateThumbnail(id) {
+        try {
+            const result = await postForm(DUPLICATE_URL, { id: id });
+            if (result.ok) {
+                window.location.reload();
+            } else {
+                reportError(result, 'Failed to duplicate thumbnail');
+            }
+        } catch (e) {
+            showModal('Error', 'An error occurred');
+        }
+    }
+
+    function renameThumbnail(id, name) {
+        showModal('Rename Thumbnail', `
+            <div class="form-group">
+                <label>Thumbnail Name</label>
+                <input type="text" id="rename-thumb-name" class="api-key-field" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;" value="">
+            </div>
+        `, [
+            { text: 'Cancel', className: 'modal-btn' },
+            {
+                text: 'Save',
+                className: 'modal-btn modal-btn-primary',
+                callback: async () => {
+                    const input = document.getElementById('rename-thumb-name');
+                    const value = input ? input.value.trim() : '';
+                    if (!value || value === name) return;
+                    try {
+                        const result = await postForm(RENAME_URL, { id: id, name: value });
+                        if (result.ok) {
+                            window.location.reload();
+                        } else {
+                            reportError(result, 'Failed to rename');
+                        }
+                    } catch (e) {
+                        showModal('Error', 'An error occurred');
+                    }
+                }
+            }
+        ]);
+        // Set the value through the DOM so the name can never be interpreted
+        // as markup.
+        const input = document.getElementById('rename-thumb-name');
+        if (input) {
+            input.value = name;
+            input.focus();
+            input.select();
+        }
+    }
+
+    function deleteThumbnail(id) {
+        showModal('Confirm Delete', 'Are you sure you want to delete this thumbnail and all of its assets?', [
+            { text: 'Cancel', className: 'modal-btn' },
+            {
+                text: 'Delete',
+                className: 'modal-btn modal-btn-danger',
+                callback: async () => {
+                    try {
+                        const result = await postForm(DELETE_URL, { id: id });
+                        if (result.ok) {
+                            window.location.reload();
+                        } else {
+                            reportError(result, 'Failed to delete thumbnail');
+                        }
+                    } catch (e) {
+                        showModal('Error', 'An error occurred');
+                    }
+                }
+            }
+        ]);
+    }
+</script>
+{% endblock %}

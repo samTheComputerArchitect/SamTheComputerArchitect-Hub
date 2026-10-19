@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Settings{% endblock %}
+
+{% block page_subnav %}
+<style>
+    .settings-subnav {
+        display: flex;
+        align-items: stretch;
+        height: 38px;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0;
+    }
+    .settings-tab {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        padding: 0 20px;
+        color: var(--text-nav);
+        font-size: 13px;
+        font-weight: 400;
+        text-decoration: none;
+        transition: color 0.15s, background 0.15s;
+        cursor: pointer;
+        border-right: 1px solid var(--border);
+    }
+    .settings-tab:last-child {
+        border-right: none;
+    }
+    .settings-tab:hover {
+        color: var(--text-primary);
+        background: #1a1a1a;
+    }
+    .settings-tab.active {
+        color: var(--color-primary);
+        background: var(--bg-primary);
+        border-bottom: 2px solid var(--color-primary);
+    }
+    .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        padding: 24px;
+    }
+    .api-key-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        padding: 16px;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .api-key-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+    .api-key-container {
+        display: flex;
+        align-items: center;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        flex: 1;
+        height: 36px;
+        box-sizing: border-box;
+    }
+    .api-key-prefix {
+        padding-left: 12px;
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        user-select: none;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .api-key-field {
+        flex: 1;
+        height: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        padding: 6px 12px;
+        font-family: var(--font-mono);
+        color: var(--text-primary);
+        font-size: 13px;
+        margin: 0;
+    }
+    .copy-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        background: none;
+        border: 1px solid var(--border-light);
+        color: var(--text-primary);
+        transition: all 0.15s;
+    }
+    .copy-btn:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+    .save-btn {
+        padding: 8px 0;
+        background: var(--color-primary);
+        color: var(--bg-secondary);
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+        font-size: 13px;
+    }
+    .save-btn:hover {
+        opacity: 0.9;
+    }
+    .save-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .tab-content {
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+</style>
+
+<div class="settings-subnav">
+    <a href="?tab=api_keys" class="settings-tab {% if active_tab == 'api_keys' %}active{% endif %}">API Keys</a>
+    <a href="?tab=models" class="settings-tab {% if active_tab == 'models' %}active{% endif %}">Models</a>
+</div>
+{% endblock %}
+
+{% block content %}
+    <div id="api_keys" class="tab-content {% if active_tab == 'api_keys' %}active{% endif %}">
+        <h2 style="margin: 24px 24px 20px 24px; font-size: 24px;">API Keys</h2>
+        
+        <div class="settings-grid">
+            <div class="api-key-item">
+                <label style="font-size:13px; color:var(--text-muted);">Ollama Cloud API Key</label>
+                <div class="api-key-row">
+                    <div class="api-key-container">
+                        <span class="api-key-prefix" id="ollama-prefix">***</span>
+                        <input type="password" id="ollama-key" class="api-key-field" placeholder="Enter API Key..." autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+                    </div>
+                    <button type="button" class="copy-btn" id="copy-ollama">Copy</button>
+                </div>
+
+                <button type="button" class="save-btn" id="save-ollama">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="models" class="tab-content {% if active_tab == 'models' %}active{% endif %}">
+        <h2 style="margin: 24px 24px 20px 24px; font-size: 24px;">Models</h2>
+        <div style="padding: 0 24px;">
+            <p style="color: var(--text-secondary);">Welcome to the models tab. Model configuration will appear here.</p>
+        </div>
+    </div>
+
+<script>
+    const SAVE_URL = "{% url 'save_api_key' %}";
+    const CSRF_TOKEN = '{{ csrf_token }}';
+
+    function getMaskedPrefix(key) {
+        if (!key) return '***';
+        return key.substring(0, 6);
+    }
+
+    async function loadApiKeys() {
+        try {
+            const response = await fetch("{% url 'get_api_keys' %}");
+            if (response.ok) {
+                const keys = await response.json();
+                const ollamaKey = keys.find(k => k.provider === 'OllamaCloud');
+                if (ollamaKey) {
+                    const input = document.getElementById('ollama-key');
+                    const prefix = document.getElementById('ollama-prefix');
+                    input.dataset.realValue = ollamaKey.key;
+                    input.value = ollamaKey.key;
+                    prefix.textContent = getMaskedPrefix(ollamaKey.key);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load API keys', e);
+        }
+    }
+
+    const ollamaInput = document.getElementById('ollama-key');
+    const ollamaPrefix = document.getElementById('ollama-prefix');
+    if (ollamaInput && ollamaPrefix) {
+        ollamaInput.addEventListener('input', function() {
+            ollamaPrefix.textContent = getMaskedPrefix(this.value);
+        });
+
+        ollamaInput.addEventListener('blur', function() {
+            this.dataset.realValue = this.value;
+        });
+    }
+
+    document.getElementById('save-ollama').addEventListener('click', async function() {
+        const key = ollamaInput.value;
+        const btn = this;
+        if (!key) {
+            showModal('Error', 'Please enter a key');
+            return;
+        }
+        
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        const body = new URLSearchParams();
+        body.append('provider', 'OllamaCloud');
+        body.append('key', key);
+        body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+
+        try {
+            const response = await fetch(SAVE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            });
+            if (response.ok) {
+                showModal('Success', 'API Key saved successfully');
+                ollamaInput.dataset.realValue = key;
+                ollamaPrefix.textContent = getMaskedPrefix(key);
+            } else {
+                const data = await response.json();
+                showModal('Error', data.error || 'Failed to save');
+            }
+        } catch (e) {
+            showModal('Error', 'An error occurred while saving');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save Key';
+        }
+    });
+
+    document.getElementById('copy-ollama').addEventListener('click', function() {
+        const keyField = document.getElementById('ollama-key');
+        const valueToCopy = keyField.dataset.realValue || keyField.value;
+        navigator.clipboard.writeText(valueToCopy).then(() => {
+            const originalText = this.textContent;
+            this.textContent = 'Copied!';
+            setTimeout(() => { this.textContent = originalText; }, 2000);
+        });
+    });
+
+    loadApiKeys();
+</script>
+{% endblock %}
+

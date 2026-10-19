@@ -1,0 +1,417 @@
+{% extends 'base.html' %}
+
+{% block page_name %}{% if is_edit %}Edit experiment{% else %}New experiment{% endif %}{% endblock %}
+
+{% block content %}
+<style>
+    main {
+        padding: 20px 20px 16px;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .form-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 46px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        border-radius: 4px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0 8px 0 6px;
+        margin-bottom: 14px;
+        overflow: hidden;
+    }
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        padding: 0 10px 0 8px;
+        flex: 0 0 auto;
+        color: var(--text-secondary);
+        border: 1px solid transparent;
+        background: none;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .back-link:hover {
+        color: var(--color-primary);
+        border-color: var(--border);
+    }
+    .back-name {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .back-link:hover .back-name {
+        color: var(--color-primary);
+    }
+    .form-sep {
+        color: var(--text-nav);
+        font-size: 13px;
+        flex: 0 0 auto;
+    }
+    .form-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 13px;
+        color: var(--text-primary);
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .form-spacer {
+        flex: 1;
+    }
+    .tool-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 14px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+        white-space: nowrap;
+    }
+    .tool-btn:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+    .tool-btn-primary {
+        background: var(--color-primary);
+        border-color: var(--color-primary);
+        color: var(--bg-primary);
+        font-weight: 600;
+    }
+    .tool-btn-primary:hover {
+        color: var(--bg-primary);
+        opacity: 0.88;
+    }
+
+    .form-layout {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        /* both panels stretch to the same height */
+        align-items: stretch;
+    }
+    @media (max-width: 980px) {
+        .form-layout {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+    .panel {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .panel.full {
+        grid-column: 1 / -1;
+    }
+    .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        border-bottom: 1px solid var(--border);
+        flex: 0 0 auto;
+    }
+    .panel-hint {
+        margin-left: auto;
+        font-size: 10px;
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--text-muted);
+    }
+    .panel-body {
+        padding: 16px;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    /* only the direct children of the panel body are spaced apart */
+    .panel-body > .field + .field {
+        margin-top: 16px;
+    }
+    /* the last text area of a panel fills the leftover height, so both
+       panels end up looking the same */
+    .panel-body > .field-grow {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    .panel-body > .field-grow textarea {
+        flex: 1 1 auto;
+        min-height: 120px;
+    }
+    .field {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .field-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        margin-bottom: 7px;
+        flex: 0 0 auto;
+    }
+    .field input[type="text"],
+    .field textarea,
+    .field input[type="file"] {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        padding: 9px 11px;
+        border-radius: 3px;
+    }
+    .field textarea {
+        resize: vertical;
+        line-height: 1.7;
+        min-height: 90px;
+    }
+    .field input[type="text"]:focus,
+    .field textarea:focus,
+    .field input[type="file"]:focus {
+        outline: none;
+        border-color: var(--color-primary);
+    }
+    .field input[type="file"] {
+        font-size: 12px;
+        color: var(--text-secondary);
+        padding: 8px 10px;
+    }
+    .field input[type="file"]::file-selector-button {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        padding: 5px 10px;
+        margin-right: 10px;
+        cursor: pointer;
+    }
+    .field input[type="file"]::file-selector-button:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+    .field-help {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.6;
+    }
+    .field-errors {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--color-danger-light);
+        line-height: 1.6;
+    }
+    .field-errors ul {
+        margin: 0;
+        padding-left: 16px;
+    }
+    .existing-files {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 14px;
+    }
+    .existing-file {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 10px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .existing-file .name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .existing-file .size {
+        color: var(--text-muted);
+        font-size: 10px;
+    }
+    .existing-file label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        font-size: 11px;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+    .selected-files {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .selected-file {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 9px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        font-size: 11px;
+        color: var(--text-secondary);
+    }
+</style>
+
+<form method="post" enctype="multipart/form-data" id="experiment-form">
+    {% csrf_token %}
+
+    <div class="form-bar">
+        <a class="back-link" href="{% url 'research_project' project.pk %}" title="Back to {{ project.acronym }}" aria-label="Back to {{ project.acronym }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+            <span class="back-name">{{ project.acronym }}</span>
+        </a>
+        <span class="form-sep">&rsaquo;</span>
+        <div class="form-title">{% if is_edit %}Edit experiment{% else %}New experiment{% endif %}</div>
+        <div class="form-spacer"></div>
+        <a class="tool-btn" href="{% url 'research_project' project.pk %}">Cancel</a>
+        <button type="submit" class="tool-btn tool-btn-primary">
+            {% if is_edit %}Save changes{% else %}Create experiment{% endif %}
+        </button>
+    </div>
+
+    {% if form.non_field_errors %}
+        <div class="field-errors" style="margin-bottom: 14px;">
+            <ul>
+                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="form-layout">
+        <section class="panel">
+            <div class="panel-title">Experiment</div>
+            <div class="panel-body">
+                <div class="field">
+                    <label class="field-label" for="id_title">Title</label>
+                    <input type="text" id="id_title" name="title" value="{{ form.title.value|default:'' }}" maxlength="200" placeholder="What did you try?" required>
+                    {% if form.title.errors %}
+                        <div class="field-errors"><ul>{% for error in form.title.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                    {% endif %}
+                </div>
+                <div class="field field-grow">
+                    <label class="field-label" for="id_description">Description</label>
+                    <textarea id="id_description" name="description" rows="6" placeholder="Setup, data, anything that helps you remember what this experiment was.">{{ form.description.value|default:'' }}</textarea>
+                    {% if form.description.errors %}
+                        <div class="field-errors"><ul>{% for error in form.description.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title">Thinking</div>
+            <div class="panel-body">
+                <div class="field{% if not is_edit %} field-grow{% endif %}">
+                    <label class="field-label" for="id_hypothesis">Hypothesis</label>
+                    <textarea id="id_hypothesis" name="hypothesis" rows="6" placeholder="What did you expect to happen?">{{ form.hypothesis.value|default:'' }}</textarea>
+                    {% if form.hypothesis.errors %}
+                        <div class="field-errors"><ul>{% for error in form.hypothesis.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                    {% endif %}
+                </div>
+                {% if is_edit %}
+                    <div class="field field-grow">
+                        <label class="field-label" for="id_conclusion">Conclusion</label>
+                        <textarea id="id_conclusion" name="conclusion" rows="6" placeholder="What actually happened, and what did you conclude?">{{ form.conclusion.value|default:'' }}</textarea>
+                        {% if form.conclusion.errors %}
+                            <div class="field-errors"><ul>{% for error in form.conclusion.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="panel full">
+            <div class="panel-title">Attachments <span class="panel-hint">Any file type, up to 25 MB each</span></div>
+            <div class="panel-body">
+                {% if form.instance.pk and form.instance.files.all %}
+                    <div class="existing-files">
+                        {% for file in form.instance.files.all %}
+                            <div class="existing-file">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span class="name">{{ file.original_name|default:file.file.name }}</span>
+                                {% if file.file.size %}<span class="size">{{ file.file.size|filesizeformat }}</span>{% endif %}
+                                <label>
+                                    <input type="checkbox" name="remove_files" value="{{ file.pk }}">
+                                    Remove
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="field">
+                    <input type="file" name="attachments" multiple>
+                    <div class="field-help">Select as many files as you like - they are stored with the experiment.</div>
+                    <div class="selected-files" id="selected-files"></div>
+                    {% if form.attachments.errors %}
+                        <div class="field-errors"><ul>{% for error in form.attachments.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+</form>
+
+<script>
+    (function () {
+        const input = document.querySelector('#experiment-form input[type="file"]');
+        const target = document.getElementById('selected-files');
+        if (!input || !target) return;
+        input.addEventListener('change', function () {
+            target.innerHTML = '';
+            Array.from(input.files || []).forEach(function (file) {
+                const chip = document.createElement('span');
+                chip.className = 'selected-file';
+                chip.textContent = file.name + '  (' + Math.max(1, Math.round(file.size / 1024)) + ' KB)';
+                target.appendChild(chip);
+            });
+        });
+    })();
+</script>
+{% endblock %}

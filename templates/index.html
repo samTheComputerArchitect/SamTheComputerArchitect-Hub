@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Home{% endblock %}
+
+{% block content %}
+<style>
+    .home-lead {
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--text-secondary);
+        max-width: 70ch;
+        margin-bottom: 28px;
+    }
+    .home-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 14px;
+        max-width: 1100px;
+    }
+    .home-card {
+        display: block;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 18px;
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .home-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--color-primary);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+    }
+    .home-card-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+    .home-card:hover .home-card-name {
+        color: var(--color-primary);
+    }
+    .home-card-text {
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--text-muted);
+    }
+</style>
+
+<h1 style="margin-bottom: 12px;">SamTheComputerArchitect</h1>
+<p class="home-lead">
+    Your projects in one place, with the tools around them built in. Open a project, pick up
+    the tool you need, and get back to what you were doing.
+</p>
+
+<div class="home-grid">
+    <a class="home-card" href="{% url 'thumbnails' %}">
+        <div class="home-card-name">Thumbnails</div>
+        <div class="home-card-text">A 1280 × 720 canvas editor with layers, snapping guides, shapes, text and PNG export.</div>
+    </a>
+    <a class="home-card" href="{% url 'notes' %}">
+        <div class="home-card-name">Notes</div>
+        <div class="home-card-text">An infinite canvas for ink, sticky notes, headings and images.</div>
+    </a>
+    <a class="home-card" href="{% url 'research' %}">
+        <div class="home-card-name">Research</div>
+        <div class="home-card-text">Projects with tags and statuses, and experiments with hypotheses, conclusions and files.</div>
+    </a>
+    <a class="home-card" href="{% url 'videos' %}">
+        <div class="home-card-name">Videos</div>
+        <div class="home-card-text">Your video library, with notes, scripts and release dates. Coming next.</div>
+    </a>
+    <a class="home-card" href="{% url 'editing' %}">
+        <div class="home-card-name">Editing</div>
+        <div class="home-card-text">A timeline and a preview. Coming next.</div>
+    </a>
+    <a class="home-card" href="{% url 'settings' %}">
+        <div class="home-card-name">Settings</div>
+        <div class="home-card-text">API keys and model configuration.</div>
+    </a>
+</div>
+{% endblock %}

@@ -1,0 +1,1658 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Notes{% endblock %}
+
+{% block page_header_right %}
+    <button type="button" class="add-notebook-btn" id="add-notebook-btn">+ Notebook</button>
+{% endblock %}
+
+{% block content %}
+<div class="notes-layout">
+    <div class="note-card">
+
+
+        <form method="get" class="notebook-form">
+            <select name="notebook" class="notebook-select" aria-label="Notebook">
+                {% for notebook in notebooks %}
+                    <option value="{{ notebook.id }}"{% if selected and selected.id == notebook.id %} selected{% endif %}>{{ notebook.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <div class="note-divider"></div>
+        <ul class="section-list">
+            {% for section in sections %}
+                <li class="section-item" data-section-id="{{ section.id }}">
+                    <a class="section-link{% if selected_section and selected_section.id == section.id %} active{% endif %}" 
+                       data-section-id="{{ section.id }}"
+                       href="?notebook={{ selected.id }}&amp;section={{ section.id }}">{{ section.name }}</a>
+                    <button type="button" class="section-delete-btn" data-section-id="{{ section.id }}" aria-label="Delete section">&times;</button>
+                </li>
+            {% endfor %}
+            {% if selected %}
+<li class="section-new">
+    <form method="post" action="{% url 'create_section' %}" id="section-form" hidden autocomplete="off">
+        {% csrf_token %}
+        <input type="text" style="display:none" name="fake_field">
+        <input type="hidden" name="notebook" value="{{ selected.id }}">
+        <input type="text" name="name" id="section-input" class="section-input" value="New Section" maxlength="100" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+    </form>
+</li>
+
+            {% endif %}
+        </ul>
+        {% if selected %}
+            <button type="button" class="add-section-btn" id="add-section-btn">+ Section</button>
+        {% endif %}
+    </div>
+    <div class="notes-editor">
+        <div class="tab-strip">
+            {% for tab in tabs %}
+                <div class="tab{% if selected_tab and selected_tab.id == tab.id %} active{% endif %}" 
+                     data-tab-id="{{ tab.id }}" 
+                     data-href="?notebook={{ selected.id }}&amp;section={{ selected_section.id }}&amp;tab={{ tab.id }}" 
+                     style="cursor: pointer;">
+                    <span class="tab-name">{{ tab.name }}</span>
+                    <button type="button" class="tab-delete-btn" data-tab-id="{{ tab.id }}" aria-label="Delete tab">&times;</button>
+                </div>
+            {% endfor %}
+    {% if selected_section %}
+        <form method="post" action="{% url 'create_tab' %}" id="tab-form" class="tab-form" hidden autocomplete="off">
+            {% csrf_token %}
+            <input type="text" style="display:none" name="fake_field">
+            <input type="hidden" name="section" value="{{ selected_section.id }}">
+            <input type="text" name="name" id="tab-input" class="tab-input" value="New Tab" maxlength="100" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+        </form>
+    {% endif %}
+
+            <button type="button" class="add-tab-btn" id="add-tab-btn" aria-label="Add tab">+</button>
+        </div>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+            <defs>
+                <filter id="ink-outline" filterUnits="userSpaceOnUse" x="-1000" y="-1000" width="3000" height="3000">
+                    <feMorphology in="SourceAlpha" operator="dilate" radius="4" result="dilated"/>
+                    <feFlood flood-color="#5294e2" flood-opacity="0.25" result="outlineColor"/>
+                    <feComposite in="outlineColor" in2="dilated" operator="in" result="outline"/>
+                    <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.25 0" result="translucentLine"/>
+                    <feMerge>
+                        <feMergeNode in="translucentLine"/>
+                        <feMergeNode in="outline"/>
+                    </feMerge>
+                </filter>
+            </defs>
+        </svg>
+        <div class="editor-body">
+            <div class="canvas-notes" id="canvas-notes">
+                <svg class="canvas-draw" id="canvas-draw" xmlns="http://www.w3.org/2000/svg">
+                    {% for drawing in drawing_items %}
+                        <path class="canvas-ink" data-id="{{ drawing.pk }}" style="stroke: {{ drawing.color }}; --ink-width: {{ drawing.width }}px" d="{{ drawing.path }}"></path>
+                    {% endfor %}
+                </svg>
+                {% for note in note_items %}
+                    {% if note.kind == 'note' %}
+                        <div class="canvas-note saved" data-id="{{ note.id }}" data-kind="note" style="left: {{ note.x }}px; top: {{ note.y }}px;">
+                            <div class="note-handle">
+                                <span class="note-square"></span>
+                                <span class="note-date">{{ note.date|date:"M j" }}</span>
+                            </div>
+                            <div class="note-text" contenteditable="true">{{ note.text }}</div>
+                        </div>
+                    {% else %}
+                        <div class="canvas-heading {{ note.kind }}" contenteditable="false" data-id="{{ note.id }}" data-kind="{{ note.kind }}" style="left: {{ note.x }}px; top: {{ note.y }}px;">{{ note.text }}</div>
+                    {% endif %}
+                {% endfor %}
+                {% for image in image_items %}
+                    <div class="canvas-image-box" data-id="{{ image.id }}" data-kind="image" style="left: {{ image.x }}px; top: {{ image.y }}px; width: {{ image.width }}px; height: {{ image.height }}px; z-index: {{ image.z }}; transform: rotate({{ image.rotation }}deg);">
+                        <img class="canvas-image" src="{{ image.data }}" alt="" draggable="false">
+                        <div class="image-resize-handle handle-br"></div>
+                        <div class="image-edge-handle handle-right"></div>
+                        <div class="image-edge-handle handle-bottom"></div>
+                        <div class="image-rotate-handle"></div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="zoom-controls">
+                <button type="button" class="zoom-btn" id="zoom-reset" aria-label="Reset zoom">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                </button>
+                <button type="button" class="zoom-btn" id="zoom-out">−</button>
+                <div class="zoom-value" id="zoom-value">100%</div>
+                <button type="button" class="zoom-btn" id="zoom-in">+</button>
+            </div>
+            <button type="button" class="brush-toggle" id="brush-toggle" aria-label="Brush settings" aria-expanded="false">
+                <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true"><path d="M6.5 1 L1.5 6 L6.5 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="brush-panel" id="brush-panel" hidden>
+                <div class="brush-heading">Brush</div>
+                <svg class="brush-preview" id="brush-preview" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true">
+                    <path id="brush-preview-path" d="M 12 16 C 28 2 44 2 60 16 C 76 30 92 30 108 16" fill="none" stroke="#5294e2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="brush-swatches" id="brush-swatches">
+                    <input type="color" class="brush-color" id="brush-color" value="#5294e2" aria-label="Custom brush color">
+                </div>
+                <div class="brush-width-row">
+                    <span>Width</span>
+                    <span id="brush-width-value">2px</span>
+                </div>
+                <input type="range" class="brush-width" id="brush-width" min="1" max="24" step="1" value="2" aria-label="Stroke width">
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    const NOTE_CREATE_URL = "{% url 'save_note' %}";
+    const NOTE_DELETE_URL = "{% url 'delete_note' %}";
+    const DRAWING_CREATE_URL = "{% url 'save_drawing' %}";
+    const DRAWING_UPDATE_URL = "{% url 'update_drawing' %}";
+    const DRAWING_DELETE_URL = "{% url 'delete_drawing' %}";
+    const IMAGE_CREATE_URL = "{% url 'save_image' %}";
+    const IMAGE_DELETE_URL = "{% url 'delete_image' %}";
+    const CSRF_TOKEN = '{{ csrf_token }}';
+    const TAB_RENAME_URL = "{% url 'rename_tab' %}";
+    const TAB_PAN_URL = "{% url 'update_tab_pan' %}";
+    const TAB_DELETE_URL = "{% url 'delete_tab' %}";
+    const SECTION_RENAME_URL = "{% url 'rename_section' %}";
+    const SECTION_DELETE_URL = "{% url 'delete_section' %}";
+    const TAB_ID = "{{ selected_tab.id }}";
+    let brushColor = localStorage.getItem('brushColor') || '#5294e2';
+    let brushWidth = parseFloat(localStorage.getItem('brushWidth')) || 2;
+
+    const measurer = document.createElement('span');
+    measurer.style.position = 'absolute';
+    measurer.style.top = '-9999px';
+    measurer.style.left = '-9999px';
+    measurer.style.whiteSpace = 'pre';
+    measurer.style.visibility = 'hidden';
+    document.body.appendChild(measurer);
+
+    function autoSizeInput(input) {
+        if (!input) return () => {};
+        const computed = getComputedStyle(input);
+        const font = {
+            fontFamily: computed.fontFamily,
+            fontSize: computed.fontSize,
+            fontWeight: computed.fontWeight,
+            letterSpacing: computed.letterSpacing,
+        };
+        const extra = parseFloat(computed.paddingLeft) + parseFloat(computed.paddingRight)
+            + parseFloat(computed.borderLeftWidth) + parseFloat(computed.borderRightWidth);
+        
+        function resize() {
+            if (!input) return;
+            measurer.style.fontFamily = font.fontFamily;
+            measurer.style.fontSize = font.fontSize;
+            measurer.style.fontWeight = font.fontWeight;
+            measurer.style.letterSpacing = font.letterSpacing;
+            measurer.textContent = input.value || input.placeholder || '';
+            input.style.width = Math.ceil(measurer.getBoundingClientRect().width + extra) + 'px';
+        }
+
+        input.addEventListener('input', resize);
+        resize();
+        return resize;
+    }
+
+    const notebookSelect = document.querySelector('.notebook-select');
+    if (notebookSelect) {
+        notebookSelect.addEventListener('change', function () {
+            this.form.submit();
+        });
+    }
+
+    const editorBody = document.querySelector('.editor-body');
+    const notesLayer = document.getElementById('canvas-notes');
+    if (editorBody) {
+        const GRID = 11;
+        let panX = {{ pan_x }};
+        let panY = {{ pan_y }};
+        let zoom = 1;
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let baseX = 0;
+        let baseY = 0;
+        let drawing = false;
+        let drawRect = null;
+        let drawPanX = 0;
+        let drawPanY = 0;
+        let drawPoints = [];
+        let drawPathEl = null;
+        const drawSvg = document.getElementById('canvas-draw');
+        
+        if (notesLayer) {
+            notesLayer.style.transformOrigin = '0 0';
+        }
+
+        applyPan();
+
+        function applyPan() {
+            const gridSize = 22 * zoom;
+            const gridOffset = 11 * zoom;
+            editorBody.style.backgroundSize = gridSize + 'px ' + gridSize + 'px';
+            editorBody.style.backgroundPosition = (gridOffset + panX) + 'px ' + (gridOffset + panY) + 'px';
+            if (notesLayer) {
+                notesLayer.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ')';
+            }
+        }
+
+        document.getElementById('zoom-reset').addEventListener('click', function () {
+            zoom = 1;
+            document.getElementById('zoom-value').textContent = '100%';
+            applyPan();
+        });
+
+        document.getElementById('zoom-in').addEventListener('click', function () {
+            zoom = Math.min(3, zoom + 0.1);
+            document.getElementById('zoom-value').textContent = Math.round(zoom * 100) + '%';
+            applyPan();
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', function () {
+            zoom = Math.max(0.3, zoom - 0.1);
+            document.getElementById('zoom-value').textContent = Math.round(zoom * 100) + '%';
+            applyPan();
+        });
+
+        editorBody.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            if (e.target.closest('.brush-toggle, .brush-panel, .zoom-controls')) return;
+            if (e.altKey && TAB_ID) {
+                startDraw(e);
+                return;
+            }
+            if (e.target.closest('.canvas-note, .canvas-heading, .canvas-image-box')) return;
+            selectImage(null);
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            baseX = panX;
+            baseY = panY;
+            editorBody.classList.add('dragging');
+            editorBody.setPointerCapture(e.pointerId);
+        });
+
+        editorBody.addEventListener('pointermove', function (e) {
+            if (drawing) {
+                drawMove(e);
+                return;
+            }
+            if (!dragging) return;
+            panX = baseX + (e.clientX - startX);
+            panY = baseY + (e.clientY - startY);
+            applyPan();
+        });
+
+        function stopDrag(e) {
+            if (drawing) {
+                finishDraw(e);
+                return;
+            }
+            if (!dragging) return;
+            dragging = false;
+            editorBody.classList.remove('dragging');
+            if (e.pointerId !== undefined && editorBody.hasPointerCapture(e.pointerId)) {
+                editorBody.releasePointerCapture(e.pointerId);
+            }
+            if (TAB_ID) {
+                const body = new URLSearchParams();
+                body.append('id', TAB_ID);
+                body.append('pan_x', panX);
+                body.append('pan_y', panY);
+                body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                fetch(TAB_PAN_URL, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: body.toString(),
+                });
+            }
+        }
+
+        editorBody.addEventListener('pointerup', stopDrag);
+        editorBody.addEventListener('pointercancel', stopDrag);
+
+        function drawPoint(ev) {
+            return {
+                x: (ev.clientX - drawRect.left - drawPanX) / zoom,
+                y: (ev.clientY - drawRect.top - drawPanY) / zoom,
+            };
+        }
+
+        function pointsToPath(pts) {
+            if (!pts.length) return '';
+            if (pts.length === 1) {
+                return 'M ' + pts[0].x + ' ' + pts[0].y + ' L ' + (pts[0].x + 0.01) + ' ' + pts[0].y;
+            }
+            let d = 'M ' + pts[0].x + ' ' + pts[0].y;
+            for (let i = 1; i < pts.length - 1; i++) {
+                const mx = (pts[i].x + pts[i + 1].x) / 2;
+                const my = (pts[i].y + pts[i + 1].y) / 2;
+                d += ' Q ' + pts[i].x + ' ' + pts[i].y + ' ' + mx + ' ' + my;
+            }
+            const last = pts[pts.length - 1];
+            d += ' L ' + last.x + ' ' + last.y;
+            return d;
+        }
+
+        function startDraw(e) {
+            e.preventDefault();
+            drawRect = editorBody.getBoundingClientRect();
+            drawPanX = panX;
+            drawPanY = panY;
+            drawPoints = [drawPoint(e)];
+            drawPathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            drawPathEl.setAttribute('class', 'canvas-ink');
+            drawPathEl.style.stroke = brushColor;
+            drawPathEl.style.setProperty('--ink-width', brushWidth + 'px');
+            drawPathEl.setAttribute('d', pointsToPath(drawPoints));
+            drawSvg.appendChild(drawPathEl);
+            drawing = true;
+            editorBody.classList.add('drawing');
+            editorBody.setPointerCapture(e.pointerId);
+        }
+
+        function drawMove(e) {
+            const p = drawPoint(e);
+            const last = drawPoints[drawPoints.length - 1];
+            if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 1.5) return;
+            drawPoints.push(p);
+            drawPathEl.setAttribute('d', pointsToPath(drawPoints));
+        }
+
+        function finishDraw(e) {
+            drawing = false;
+            editorBody.classList.remove('drawing');
+            if (e && e.pointerId !== undefined && editorBody.hasPointerCapture(e.pointerId)) {
+                editorBody.releasePointerCapture(e.pointerId);
+            }
+            const d = pointsToPath(drawPoints);
+            drawPoints = [];
+            if (!d || !TAB_ID || !drawPathEl) {
+                if (drawPathEl) drawPathEl.remove();
+                drawPathEl = null;
+                return;
+            }
+            const body = new URLSearchParams();
+            body.append('tab', TAB_ID);
+            body.append('path', d);
+            body.append('color', brushColor);
+            body.append('width', brushWidth);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            fetch(DRAWING_CREATE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (data && data.id && drawPathEl) {
+                        drawPathEl.dataset.id = data.id;
+                    }
+                });
+        }
+
+        function saveElement(el) {
+            const kind = el.dataset.kind || 'note';
+            const textEl = el.querySelector('.note-text');
+            const raw = textEl ? textEl.innerText : el.innerText;
+            const text = raw.replace(/\u00a0/g, ' ').trim();
+            const id = el.dataset.id;
+
+            if (kind === 'note') {
+                if (!text && !id) {
+                    el.remove();
+                    return;
+                }
+            } else if (!text) {
+                if (id) {
+                    deleteNote(el);
+                } else {
+                    el.remove();
+                }
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append('text', text);
+            body.append('kind', kind);
+            body.append('x', parseFloat(el.style.left) || 0);
+            body.append('y', parseFloat(el.style.top) || 0);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            if (id) {
+                body.append('id', id);
+            } else if (TAB_ID) {
+                body.append('tab', TAB_ID);
+            } else {
+                el.remove();
+                return;
+            }
+
+            fetch(NOTE_CREATE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (!data.id) return;
+                    el.dataset.id = data.id;
+                    if (kind === 'note') {
+                        el.classList.add('saved');
+                        el.querySelector('.note-handle').hidden = false;
+                        el.querySelector('.note-date').textContent = data.date;
+                    }
+                });
+        }
+
+        function startNoteDrag(event, note, handle) {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            const startX = event.clientX;
+            const startY = event.clientY;
+            const startLeft = parseFloat(note.style.left) || 0;
+            const startTop = parseFloat(note.style.top) || 0;
+            handle.setPointerCapture(event.pointerId);
+
+            function onMove(e) {
+                note.style.left = (startLeft + (e.clientX - startX) / zoom) + 'px';
+                note.style.top = (startTop + (e.clientY - startY) / zoom) + 'px';
+            }
+
+            function onUp(e) {
+                handle.removeEventListener('pointermove', onMove);
+                handle.removeEventListener('pointerup', onUp);
+                handle.removeEventListener('pointercancel', onUp);
+                if (handle.hasPointerCapture(e.pointerId)) {
+                    handle.releasePointerCapture(e.pointerId);
+                }
+                if (note.dataset.id) {
+                    saveElement(note);
+                }
+            }
+
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup', onUp);
+            handle.addEventListener('pointercancel', onUp);
+            event.preventDefault();
+        }
+
+        function deleteNote(note) {
+            const id = note.dataset.id;
+            if (!id) {
+                note.remove();
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append('id', id);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+
+            fetch(NOTE_DELETE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            })
+                .then(function () { note.remove(); });
+        }
+
+        let zCounter = 0;
+        function nextZ() { return ++zCounter; }
+
+        document.querySelectorAll('.canvas-image-box').forEach(function (b) {
+            const z = parseInt(b.style.zIndex, 10) || 0;
+            if (z > zCounter) zCounter = z;
+            initImage(b);
+        });
+
+        let selectedImage = null;
+        function selectImage(box) {
+            if (selectedImage === box) return;
+            if (selectedImage) selectedImage.classList.remove('selected');
+            selectedImage = box;
+            if (box) box.classList.add('selected');
+        }
+
+        function bringToFront(box) {
+            box.style.zIndex = nextZ();
+        }
+
+        function saveImage(box) {
+            const id = box.dataset.id;
+            const body = new URLSearchParams();
+            body.append('x', parseFloat(box.style.left) || 0);
+            body.append('y', parseFloat(box.style.top) || 0);
+            body.append('width', parseFloat(box.style.width) || 0);
+            body.append('height', parseFloat(box.style.height) || 0);
+            const rotation = box.style.transform.replace('rotate(', '').replace('deg)', '') || 0;
+            body.append('rotation', rotation);
+            body.append('z', parseInt(box.style.zIndex, 10) || 0);
+            body.append('data', box.querySelector('img').src);
+            if (id) body.append('id', id);
+            else if (TAB_ID) body.append('tab', TAB_ID);
+            else return;
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            fetch(IMAGE_CREATE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.id) box.dataset.id = data.id;
+                });
+        }
+
+        function deleteImage(box) {
+            const id = box.dataset.id;
+            if (!id) { box.remove(); return; }
+            const body = new URLSearchParams();
+            body.append('id', id);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            fetch(IMAGE_DELETE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            }).then(function () { box.remove(); });
+        }
+
+        function createImage(dataUrl, x, y, width, height) {
+            const box = document.createElement('div');
+            box.className = 'canvas-image-box';
+            box.dataset.kind = 'image';
+            box.style.left = x + 'px';
+            box.style.top = y + 'px';
+            box.style.width = width + 'px';
+            box.style.height = height + 'px';
+            box.style.transform = 'rotate(0deg)';
+            box.style.zIndex = nextZ();
+            const img = document.createElement('img');
+            img.className = 'canvas-image';
+            img.src = dataUrl;
+            img.alt = '';
+            img.draggable = false;
+            
+            const handles = [
+                { cls: 'image-resize-handle handle-br' },
+                { cls: 'image-edge-handle handle-right' },
+                { cls: 'image-edge-handle handle-bottom' },
+                { cls: 'image-rotate-handle' }
+            ];
+            
+            box.appendChild(img);
+            handles.forEach(h => {
+                const el = document.createElement('div');
+                el.className = h.cls;
+                box.appendChild(el);
+            });
+            
+            notesLayer.appendChild(box);
+            initImage(box);
+            selectImage(box);
+            saveImage(box);
+            return box;
+        }
+
+        function initImage(box) {
+            box.addEventListener('pointerdown', function (e) {
+                if (e.button !== 0) return;
+                if (e.target.classList.contains('image-resize-handle') || 
+                    e.target.classList.contains('image-edge-handle') || 
+                    e.target.classList.contains('image-rotate-handle')) return;
+                
+                e.stopPropagation();
+                bringToFront(box);
+                selectImage(box);
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startLeft = parseFloat(box.style.left) || 0;
+                const startTop = parseFloat(box.style.top) || 0;
+
+                    function onMove(ev) {
+                        box.style.left = (startLeft + (ev.clientX - startX) / zoom) + 'px';
+                        box.style.top = (startTop + (ev.clientY - startY) / zoom) + 'px';
+                    }
+
+                function onUp() {
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                    saveImage(box);
+                }
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+            });
+
+            box.querySelectorAll('.image-resize-handle, .image-edge-handle, .image-rotate-handle').forEach(handle => {
+                handle.addEventListener('pointerdown', function (e) {
+                    if (e.button !== 0) return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    bringToFront(box);
+                    selectImage(box);
+                    
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startRect = {
+                        left: parseFloat(box.style.left) || 0,
+                        top: parseFloat(box.style.top) || 0,
+                        width: parseFloat(box.style.width) || 0,
+                        height: parseFloat(box.style.height) || 0,
+                    };
+                    const aspect = startRect.width / startRect.height;
+
+                    if (handle.classList.contains('image-rotate-handle')) {
+                        const rect = box.getBoundingClientRect();
+                        const centerX = rect.left + rect.width / 2;
+                        const centerY = rect.top + rect.height / 2;
+                        function onMove(ev) {
+                            const dx = ev.clientX - centerX;
+                            const dy = ev.clientY - centerY;
+                            let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                            angle += 90;
+                            box.style.transform = 'rotate(' + angle + 'deg)';
+                        }
+                        function onUp() {
+                            window.removeEventListener('pointermove', onMove);
+                            window.removeEventListener('pointerup', onUp);
+                            saveImage(box);
+                        }
+                        window.addEventListener('pointermove', onMove);
+                        window.addEventListener('pointerup', onUp);
+                        return;
+                    }
+
+                    function onMove(ev) {
+                        const dx = (ev.clientX - startX) / zoom;
+                        const dy = (ev.clientY - startY) / zoom;
+                        let { left, top, width, height } = startRect;
+
+                        if (handle.classList.contains('handle-br')) {
+                            width += dx; height = width / aspect;
+                        } else if (handle.classList.contains('handle-bl')) {
+                            left += dx; width -= dx; height = width / aspect;
+                        } else if (handle.classList.contains('handle-tr')) {
+                            top += dy; height -= dy; width = height * aspect;
+                        } else if (handle.classList.contains('handle-tl')) {
+                            left += dx; top += dy; width -= dx; height -= dy;
+                            height = width / aspect;
+                            top = startRect.top + dy - (height - startRect.height);
+                        } else if (handle.classList.contains('handle-right')) {
+                            width += dx;
+                        } else if (handle.classList.contains('handle-left')) {
+                            left += dx; width -= dx;
+                        } else if (handle.classList.contains('handle-bottom')) {
+                            height += dy;
+                        } else if (handle.classList.contains('handle-top')) {
+                            top += dy; height -= dy;
+                        }
+
+                        if (width < 20) width = 20;
+                        if (height < 20) height = 20;
+                        
+                        box.style.left = left + 'px';
+                        box.style.top = top + 'px';
+                        box.style.width = width + 'px';
+                        box.style.height = height + 'px';
+                    }
+                    function onUp() {
+                        window.removeEventListener('pointermove', onMove);
+                        window.removeEventListener('pointerup', onUp);
+                        saveImage(box);
+                    }
+                    window.addEventListener('pointermove', onMove);
+                    window.addEventListener('pointerup', onUp);
+                });
+            });
+        }
+
+        function readAndCreateImage(blob, x, y) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                const img = new Image();
+                img.onload = function () {
+                    const maxDim = 1600;
+                    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+                    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+                    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+                    const c = document.createElement('canvas');
+                    c.width = w;
+                    c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const dataUrl = c.toDataURL('image/png');
+                    const disp = Math.min(1, 400 / Math.max(img.naturalWidth, img.naturalHeight));
+                    const dw = Math.max(1, Math.round(img.naturalWidth * disp));
+                    const dh = Math.max(1, Math.round(img.naturalHeight * disp));
+                    createImage(dataUrl, Math.round(x - dw / 2), Math.round(y - dh / 2), dw, dh);
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(blob);
+        }
+
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        editorBody.addEventListener('pointermove', function (e) {
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        function pasteCanvasPos() {
+            const rect = editorBody.getBoundingClientRect();
+            if (lastMouseX >= rect.left && lastMouseX <= rect.right &&
+                lastMouseY >= rect.top && lastMouseY <= rect.bottom) {
+                return { x: (lastMouseX - rect.left - panX) / zoom, y: (lastMouseY - rect.top - panY) / zoom };
+            }
+            return { x: (rect.width / 2 - panX) / zoom, y: (rect.height / 2 - panY) / zoom };
+        }
+
+        document.addEventListener('paste', function (e) {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type && items[i].type.indexOf('image/') === 0) {
+                    const blob = items[i].getAsFile();
+                    if (!blob) continue;
+                    e.preventDefault();
+                    const p = pasteCanvasPos();
+                    readAndCreateImage(blob, p.x, p.y);
+                    break;
+                }
+            }
+        });
+
+        editorBody.addEventListener('dragover', function (e) {
+            e.preventDefault();
+        });
+        editorBody.addEventListener('drop', function (e) {
+            e.preventDefault();
+            const dt = e.dataTransfer;
+            if (!dt) return;
+            const rect = editorBody.getBoundingClientRect();
+            for (let i = 0; i < dt.files.length; i++) {
+                const f = dt.files[i];
+                if (f.type && f.type.indexOf('image/') === 0) {
+                    readAndCreateImage(f, (e.clientX - rect.left - panX) / zoom, (e.clientY - rect.top - panY) / zoom);
+                }
+            }
+        });
+
+        function initNote(note) {
+            const handle = note.querySelector('.note-handle');
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'note-delete';
+            deleteBtn.setAttribute('aria-label', 'Delete note');
+            deleteBtn.textContent = '\u00d7';
+            deleteBtn.addEventListener('pointerdown', function (event) {
+                event.stopPropagation();
+            });
+            deleteBtn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                deleteNote(note);
+            });
+            handle.appendChild(deleteBtn);
+
+            note.querySelector('.note-text').addEventListener('blur', function () {
+                saveElement(note);
+            });
+            handle.addEventListener('pointerdown', function (event) {
+                startNoteDrag(event, note, handle);
+            });
+        }
+
+        notesLayer.querySelectorAll('.canvas-note').forEach(initNote);
+        notesLayer.querySelectorAll('.canvas-heading').forEach(initHeading);
+
+        function createNote(x, y) {
+            if (!TAB_ID) return;
+            const note = document.createElement('div');
+            note.className = 'canvas-note';
+            note.dataset.kind = 'note';
+            note.style.left = x + 'px';
+            note.style.top = y + 'px';
+
+            const handle = document.createElement('div');
+            handle.className = 'note-handle';
+            handle.hidden = true;
+
+            const square = document.createElement('span');
+            square.className = 'note-square';
+
+            const date = document.createElement('span');
+            date.className = 'note-date';
+
+            handle.appendChild(square);
+            handle.appendChild(date);
+
+            const text = document.createElement('div');
+            text.className = 'note-text';
+            text.setAttribute('contenteditable', 'true');
+
+            note.appendChild(handle);
+            note.appendChild(text);
+            notesLayer.appendChild(note);
+
+            initNote(note);
+            text.focus();
+        }
+
+        function createHeading(kind, x, y) {
+            if (!TAB_ID) return;
+            const el = document.createElement('div');
+            el.className = 'canvas-heading ' + kind;
+            el.dataset.kind = kind;
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            el.contentEditable = 'true';
+            el.classList.add('editing');
+
+            notesLayer.appendChild(el);
+            initHeading(el);
+            el.focus();
+
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        function enterHeadingEdit(el) {
+            el.contentEditable = 'true';
+            el.classList.add('editing');
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        function exitHeadingEdit(el) {
+            el.classList.remove('editing');
+            el.contentEditable = 'false';
+            saveElement(el);
+        }
+
+        function startHeadingDrag(event, el) {
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startLeft = parseFloat(el.style.left) || 0;
+            const startTop = parseFloat(el.style.top) || 0;
+            let moved = false;
+
+            function onMove(e) {
+                const dx = (e.clientX - startClientX) / zoom;
+                const dy = (e.clientY - startClientY) / zoom;
+                if (!moved && Math.abs(dx) + Math.abs(dy) < 4 / zoom) return;
+                if (!moved) {
+                    moved = true;
+                    el.classList.add('dragging');
+                }
+                el.style.left = (startLeft + dx) + 'px';
+                el.style.top = (startTop + dy) + 'px';
+            }
+
+            function onUp() {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                el.classList.remove('dragging');
+                if (moved && el.dataset.id) {
+                    saveElement(el);
+                }
+            }
+
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+        }
+
+        function initHeading(el) {
+            el.addEventListener('pointerdown', function (event) {
+                if (el.classList.contains('editing')) return;
+                if (event.button !== 0) return;
+                event.stopPropagation();
+                startHeadingDrag(event, el);
+            });
+            el.addEventListener('dblclick', function (event) {
+                event.stopPropagation();
+                if (!el.classList.contains('editing')) {
+                    enterHeadingEdit(el);
+                }
+            });
+            el.addEventListener('blur', function () {
+                if (el.classList.contains('editing')) {
+                    exitHeadingEdit(el);
+                }
+            });
+        }
+
+        let activeMenu = null;
+
+        function closeMenu() {
+            if (activeMenu) {
+                activeMenu.remove();
+                activeMenu = null;
+            }
+        }
+
+        function openMenu(clientX, clientY) {
+            closeMenu();
+            const rect = editorBody.getBoundingClientRect();
+            const canvasX = (clientX - rect.left - panX) / zoom;
+            const canvasY = (clientY - rect.top - panY) / zoom;
+
+            const menu = document.createElement('div');
+            menu.className = 'canvas-menu';
+            menu.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+            });
+
+            [
+                ['note', 'Note'],
+                ['h1', 'Heading 1'],
+                ['h2', 'Heading 2'],
+                ['h3', 'Heading 3'],
+            ].forEach(function (item) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'canvas-menu-item';
+                button.textContent = item[1];
+                button.addEventListener('click', function () {
+                    closeMenu();
+                    if (item[0] === 'note') {
+                        createNote(canvasX, canvasY);
+                    } else {
+                        createHeading(item[0], canvasX, canvasY);
+                    }
+                });
+                menu.appendChild(button);
+            });
+
+            document.body.appendChild(menu);
+
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            let left = clientX;
+            let top = clientY;
+            if (left + width > window.innerWidth - 4) {
+                left = window.innerWidth - width - 4;
+            }
+            if (top + height > window.innerHeight - 4) {
+                top = window.innerHeight - height - 4;
+            }
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+
+            activeMenu = menu;
+        }
+
+        function openHeadingMenu(clientX, clientY, el) {
+            closeMenu();
+            const menu = document.createElement('div');
+            menu.className = 'canvas-menu';
+            menu.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+            });
+
+            [
+                ['h1', 'Heading 1'],
+                ['h2', 'Heading 2'],
+                ['h3', 'Heading 3'],
+            ].forEach(function (item) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'canvas-menu-item';
+                button.textContent = item[1];
+                button.addEventListener('click', function () {
+                    closeMenu();
+                    const currentKind = el.dataset.kind;
+                    if (item[0] !== currentKind) {
+                        el.className = 'canvas-heading ' + item[0];
+                        el.dataset.kind = item[0];
+                        saveElement(el);
+                    }
+                });
+                menu.appendChild(button);
+            });
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'canvas-menu-item canvas-menu-danger';
+            del.textContent = 'Delete';
+            del.addEventListener('click', function () {
+                closeMenu();
+                deleteNote(el);
+            });
+            menu.appendChild(del);
+
+            document.body.appendChild(menu);
+
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            let left = clientX;
+            let top = clientY;
+            if (left + width > window.innerWidth - 4) {
+                left = window.innerWidth - width - 4;
+            }
+            if (top + height > window.innerHeight - 4) {
+                top = window.innerHeight - height - 4;
+            }
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+
+            activeMenu = menu;
+        }
+
+
+        function openImageMenu(clientX, clientY, box) {
+            closeMenu();
+            selectImage(box);
+            bringToFront(box);
+
+            const menu = document.createElement('div');
+            menu.className = 'canvas-menu';
+            menu.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+            });
+
+            [
+                ['Duplicate', function () {
+                    const x = (parseFloat(box.style.left) || 0) + 20;
+                    const y = (parseFloat(box.style.top) || 0) + 20;
+                    const w = parseFloat(box.style.width) || 0;
+                    const h = parseFloat(box.style.height) || 0;
+                    createImage(box.querySelector('img').src, x, y, w, h);
+                }],
+                ['Bring to front', function () { bringToFront(box); saveImage(box); }],
+                ['Send to back', function () { box.style.zIndex = 0; saveImage(box); }],
+            ].forEach(function (item) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'canvas-menu-item';
+                btn.textContent = item[0];
+                btn.addEventListener('click', function () {
+                    closeMenu();
+                    item[1]();
+                });
+                menu.appendChild(btn);
+            });
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'canvas-menu-item canvas-menu-danger';
+            del.textContent = 'Delete';
+            del.addEventListener('click', function () {
+                closeMenu();
+                deleteImage(box);
+            });
+            menu.appendChild(del);
+
+            document.body.appendChild(menu);
+
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            let left = clientX;
+            let top = clientY;
+            if (left + width > window.innerWidth - 4) {
+                left = window.innerWidth - width - 4;
+            }
+            if (top + height > window.innerHeight - 4) {
+                top = window.innerHeight - height - 4;
+            }
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+
+            activeMenu = menu;
+        }
+
+        function deleteDrawing(el) {
+            const id = el.dataset.id;
+            if (!id) { el.remove(); return; }
+            const body = new URLSearchParams();
+            body.append('id', id);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            fetch(DRAWING_DELETE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            }).then(function () { el.remove(); });
+        }
+
+        function updateDrawingColor(el, color) {
+            el.style.stroke = color;
+            const id = el.dataset.id;
+            if (!id) return;
+            const body = new URLSearchParams();
+            body.append('id', id);
+            body.append('color', color);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            fetch(DRAWING_UPDATE_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            });
+        }
+
+        function openStrokeMenu(clientX, clientY, ink) {
+            closeMenu();
+            const menu = document.createElement('div');
+            menu.className = 'canvas-menu';
+            menu.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+            });
+
+            const swatches = document.createElement('div');
+            swatches.className = 'canvas-menu-swatches';
+            BRUSH_COLORS.forEach(function (color) {
+                const s = document.createElement('button');
+                s.type = 'button';
+                s.className = 'canvas-menu-swatch';
+                s.style.background = color;
+                s.setAttribute('aria-label', color);
+                s.addEventListener('click', function () {
+                    closeMenu();
+                    updateDrawingColor(ink, color);
+                });
+                swatches.appendChild(s);
+            });
+            menu.appendChild(swatches);
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'canvas-menu-item canvas-menu-danger';
+            del.textContent = 'Delete';
+            del.addEventListener('click', function () {
+                closeMenu();
+                deleteDrawing(ink);
+            });
+            menu.appendChild(del);
+
+            document.body.appendChild(menu);
+
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            let left = clientX;
+            let top = clientY;
+            if (left + width > window.innerWidth - 4) {
+                left = window.innerWidth - width - 4;
+            }
+            if (top + height > window.innerHeight - 4) {
+                top = window.innerHeight - height - 4;
+            }
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+
+            activeMenu = menu;
+        }
+
+        editorBody.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            const ink = e.target.closest('.canvas-ink');
+            if (ink) {
+                openStrokeMenu(e.clientX, e.clientY, ink);
+                return;
+            }
+            const img = e.target.closest('.canvas-image-box');
+            if (img) {
+                openImageMenu(e.clientX, e.clientY, img);
+                return;
+            }
+            const heading = e.target.closest('.canvas-heading');
+            if (heading) {
+                openHeadingMenu(e.clientX, e.clientY, heading);
+                return;
+            }
+            openMenu(e.clientX, e.clientY);
+        });
+
+        document.addEventListener('pointerdown', function (e) {
+            if (activeMenu && !activeMenu.contains(e.target)) {
+                closeMenu();
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeMenu();
+            }
+        });
+
+        editorBody.addEventListener('dblclick', function (e) {
+            if (e.target.closest('.canvas-note, .canvas-heading')) return;
+            const rect = editorBody.getBoundingClientRect();
+            createNote((e.clientX - rect.left - panX) / zoom, (e.clientY - rect.top - panY) / zoom);
+        });
+    }
+
+    const addSectionBtn = document.getElementById('add-section-btn');
+    const sectionForm = document.getElementById('section-form');
+    const sectionInput = document.getElementById('section-input');
+
+    if (addSectionBtn && sectionForm) {
+        const resizeSection = autoSizeInput(sectionInput);
+        
+        addSectionBtn.addEventListener('click', function () {
+            sectionForm.hidden = false;
+            sectionInput.focus();
+            sectionInput.select();
+            resizeSection();
+        });
+
+        sectionInput.addEventListener('blur', function () {
+            sectionForm.submit();
+        });
+    }
+
+    const addNotebookBtn = document.getElementById('add-notebook-btn');
+    if (addNotebookBtn) {
+        addNotebookBtn.addEventListener('click', function () {
+            const modal = document.getElementById('global-modal');
+            const title = document.getElementById('modal-title');
+            const body = document.getElementById('modal-body');
+            const footer = document.getElementById('modal-footer');
+            
+            if (!modal || !title || !body || !footer) return;
+
+            title.textContent = 'Create New Notebook';
+                    body.innerHTML = `
+                        <div class="form-group">
+                            <label>Notebook Name</label>
+                            <input type="text" id="modal-notebook-name" placeholder="Enter notebook name..." maxlength="100" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+                        </div>
+                    `;
+
+            
+            footer.innerHTML = `
+                <button type="button" class="modal-btn" id="modal-cancel">Cancel</button>
+                <button type="button" class="modal-btn modal-btn-primary" id="modal-confirm">Create</button>
+            `;
+            
+            modal.classList.add('active');
+            
+            const input = body.querySelector('input');
+            if (input) input.focus();
+            
+            const cancelBtn = document.getElementById('modal-cancel');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    modal.classList.remove('active');
+                });
+            }
+            
+            const confirmBtn = document.getElementById('modal-confirm');
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', () => {
+                    const val = input ? input.value.trim() : '';
+                        if (!val) {
+                            showModal('Error', 'Please enter a name');
+                            return;
+                        }
+
+                    
+                    const requestBody = new URLSearchParams();
+                    requestBody.append('name', val);
+                    requestBody.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                    
+                    fetch("{% url 'create_notebook' %}", {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': CSRF_TOKEN,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: requestBody.toString(),
+                    })
+                    .then(r => r.json())
+                     .then(data => {
+                         if (data.id) {
+                             window.location.href = `?notebook=${data.id}`;
+                         } else if (data.error) {
+                             showModal('Error', data.error);
+                         }
+                     })
+                     .catch(err => showModal('Error', 'An error occurred'))
+                     .finally(() => {
+                         modal.classList.remove('active');
+                     });
+
+                });
+            }
+            
+            // Close on Escape
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    modal.classList.remove('active');
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        });
+    }
+
+    // Close modal when clicking on overlay
+    const globalModal = document.getElementById('global-modal');
+    if (globalModal) {
+        globalModal.addEventListener('click', function (e) {
+            if (e.target === this) {
+                this.classList.remove('active');
+            }
+        });
+    }
+
+    document.querySelectorAll('.section-item').forEach(function (section) {
+        const link = section.querySelector('.section-link');
+        let clickTimeout = null;
+        
+        if (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (clickTimeout) clearTimeout(clickTimeout);
+                
+                clickTimeout = setTimeout(function () {
+                    window.location.href = link.href;
+                }, 250);
+            });
+
+            link.addEventListener('dblclick', function (e) {
+                if (clickTimeout) {
+                    clearTimeout(clickTimeout);
+                    clickTimeout = null;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                const id = section.dataset.sectionId;
+                if (!id) return;
+                const original = link.textContent.trim();
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'section-input';
+                input.value = original;
+                input.maxLength = 100;
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('readonly', 'readonly');
+                input.addEventListener('focus', function() { this.removeAttribute('readonly'); });
+                
+                link.style.display = 'none';
+                section.insertBefore(input, link);
+                autoSizeInput(input);
+                input.focus();
+                input.select();
+                
+                function finish() {
+                    const name = input.value.trim() || original;
+                    link.textContent = name;
+                    link.style.display = '';
+                    input.remove();
+                    if (name !== original) {
+                        const body = new URLSearchParams();
+                        body.append('id', id);
+                        body.append('name', name);
+                        body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                        fetch(SECTION_RENAME_URL, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': CSRF_TOKEN,
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: body.toString(),
+                        });
+                    }
+                }
+                input.addEventListener('blur', finish);
+                input.addEventListener('keydown', function (ev) {
+                    if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        input.blur();
+                    } else if (ev.key === 'Escape') {
+                        input.value = original;
+                        input.blur();
+                    }
+                });
+            });
+        }
+
+
+        const deleteBtn = section.querySelector('.section-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = section.dataset.sectionId;
+                if (!id) return;
+                
+                const body = new URLSearchParams();
+                body.append('id', id);
+                body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                fetch(SECTION_DELETE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: body.toString(),
+                }).then(function () {
+                    window.location.reload();
+                });
+            });
+        }
+    });
+
+    document.querySelectorAll('.tab').forEach(function (tab) {
+        let clickTimeout = null;
+        tab.addEventListener('click', function (e) {
+            if (e.target.classList.contains('tab-delete-btn')) {
+                e.stopPropagation();
+                return;
+            }
+            if (e.target.tagName === 'INPUT') return;
+            
+            if (clickTimeout) clearTimeout(clickTimeout);
+            
+            clickTimeout = setTimeout(function () {
+                const href = tab.dataset.href;
+                if (href) {
+                    window.location.href = href;
+                }
+            }, 250);
+        });
+
+        const deleteBtn = tab.querySelector('.tab-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = tab.dataset.tabId;
+                if (!id) return;
+                
+                const body = new URLSearchParams();
+                body.append('id', id);
+                body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                fetch(TAB_DELETE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: body.toString(),
+                }).then(function () {
+                    window.location.reload();
+                });
+            });
+        }
+
+        tab.addEventListener('dblclick', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (clickTimeout) {
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
+            }
+            const id = tab.dataset.tabId;
+            if (!id) return;
+            
+            const nameSpan = tab.querySelector('.tab-name');
+            if (!nameSpan) return;
+            const original = nameSpan.textContent.trim();
+            
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'tab-input';
+                input.value = original;
+                input.maxLength = 100;
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('readonly', 'readonly');
+                input.addEventListener('focus', function() { this.removeAttribute('readonly'); });
+                
+                nameSpan.style.display = 'none';
+
+            tab.insertBefore(input, nameSpan);
+            
+            autoSizeInput(input);
+            input.focus();
+            input.select();
+
+            function finish() {
+                const name = input.value.trim() || original;
+                nameSpan.textContent = name;
+                nameSpan.style.display = '';
+                input.remove();
+                if (name !== original) {
+                    const body = new URLSearchParams();
+                    body.append('id', id);
+                    body.append('name', name);
+                    body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                    fetch(TAB_RENAME_URL, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': CSRF_TOKEN,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: body.toString(),
+                    });
+                }
+            }
+            input.addEventListener('blur', finish);
+            input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    input.blur();
+                } else if (ev.key === 'Escape') {
+                    input.value = original;
+                    input.blur();
+                }
+            });
+        });
+    });
+
+    const addTabBtn = document.getElementById('add-tab-btn');
+    const tabForm = document.getElementById('tab-form');
+    const tabInput = document.getElementById('tab-input');
+
+    if (addTabBtn && tabForm) {
+        const resizeTab = autoSizeInput(tabInput);
+
+        addTabBtn.addEventListener('click', function () {
+            tabForm.hidden = false;
+            tabInput.focus();
+            tabInput.select();
+            resizeTab();
+        });
+
+        tabInput.addEventListener('blur', function () {
+            tabForm.submit();
+        });
+    }
+
+    const brushToggle = document.getElementById('brush-toggle');
+    const brushPanel = document.getElementById('brush-panel');
+    const brushSwatches = document.getElementById('brush-swatches');
+    const brushColorInput = document.getElementById('brush-color');
+    const brushWidthInput = document.getElementById('brush-width');
+    const brushWidthValue = document.getElementById('brush-width-value');
+    const brushPreviewPath = document.getElementById('brush-preview-path');
+
+    const BRUSH_COLORS = [
+        '#5294e2', '#e8e8e8', '#e25252', '#52e27a',
+        '#e2c452', '#e2914f', '#9a52e2', '#4fc3e2',
+        '#2d333b', '#8a919a', '#d34fa0', '#3fa34d',
+    ];
+
+
+    function syncBrushUI() {
+        brushColorInput.value = brushColor;
+        brushSwatches.querySelectorAll('.brush-swatch').forEach(function (s) {
+            s.classList.toggle('active', s.dataset.color === brushColor);
+        });
+        if (brushWidthInput) brushWidthInput.value = brushWidth;
+        if (brushWidthValue) brushWidthValue.textContent = brushWidth + 'px';
+        if (brushPreviewPath) {
+            brushPreviewPath.style.stroke = brushColor;
+            brushPreviewPath.style.strokeWidth = brushWidth;
+        }
+    }
+
+    if (brushToggle && brushPanel) {
+        BRUSH_COLORS.forEach(function (color) {
+            const swatch = document.createElement('button');
+            swatch.type = 'button';
+            swatch.className = 'brush-swatch';
+            swatch.style.background = color;
+            swatch.dataset.color = color;
+            swatch.setAttribute('aria-label', color);
+            swatch.addEventListener('click', function () {
+                brushColor = color;
+                localStorage.setItem('brushColor', color);
+                syncBrushUI();
+            });
+            brushSwatches.appendChild(swatch);
+        });
+
+        brushSwatches.appendChild(brushColorInput);
+
+        brushColorInput.addEventListener('input', function () {
+            brushColor = this.value;
+            localStorage.setItem('brushColor', this.value);
+            syncBrushUI();
+        });
+
+        if (brushWidthInput) {
+            brushWidthInput.addEventListener('input', function () {
+                brushWidth = parseFloat(this.value) || 1;
+                localStorage.setItem('brushWidth', this.value);
+                syncBrushUI();
+            });
+        }
+
+        brushToggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = brushPanel.hidden;
+            brushPanel.hidden = !open;
+            brushToggle.setAttribute('aria-expanded', String(open));
+        });
+
+        syncBrushUI();
+    }
+</script>
+{% endblock %}

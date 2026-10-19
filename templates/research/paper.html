@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Research Paper{% endblock %}
+
+{% block content %}
+<style>
+    main {
+        padding: 20px 20px 16px;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        text-decoration: none;
+        margin-bottom: 14px;
+        transition: color 0.15s;
+    }
+    .back-link:hover {
+        color: var(--color-primary);
+    }
+    .paper-shell {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 60px 40px;
+        text-align: center;
+    }
+    .paper-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 10px;
+    }
+    .paper-lead {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+        max-width: 52ch;
+        margin: 0 auto;
+    }
+    .paper-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 26px;
+        padding: 7px 13px;
+        border: 1px dashed var(--border);
+        border-radius: 3px;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+</style>
+
+<a class="back-link" href="{% url 'research_project' project.pk %}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+    {{ project.acronym }}
+</a>
+
+<section class="paper-shell">
+    <h1 class="paper-title">Create your research paper here</h1>
+    <p class="paper-lead">
+        The paper editor for <strong>{{ project.acronym }}</strong> is being built. Your experiments,
+        files, hypotheses and conclusions will be pulled straight into the draft.
+    </p>
+    <div class="paper-note">Nothing to fill in yet</div>
+</section>
+{% endblock %}
