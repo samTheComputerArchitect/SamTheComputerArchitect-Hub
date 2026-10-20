@@ -3,6 +3,12 @@ from django import forms
 from .models import Experiment
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# Per-file uploads are validated individually, but the form must also guard
+# against the total payload of one submit blowing past a sane bound.
+MAX_TOTAL_UPLOAD_BYTES = 100 * 1024 * 1024
+# The free text fields are TextFields, so the database has no bound of its
+# own: the form is the place where a runaway paste gets stopped.
+MAX_TEXT_LENGTH = 20000
 ALLOWED_EXTENSIONS = {
     'pdf', 'txt', 'md', 'csv', 'json', 'log', 'py', 'ipynb', 'png', 'jpg',
     'jpeg', 'gif', 'webp', 'svg', 'zip', 'tar', 'gz', 'xlsx', 'docx', 'mp4',
@@ -56,6 +62,9 @@ class ExperimentForm(forms.ModelForm):
     title = forms.CharField(max_length=200, required=False)
     attachments = MultipleFileField(required=False)
 
+    # the page shows the same list, so the promise and the server agree
+    allowed_extensions = ALLOWED_EXTENSIONS
+
     class Meta:
         model = Experiment
         fields = ['title', 'description', 'hypothesis', 'conclusion']
@@ -71,8 +80,31 @@ class ExperimentForm(forms.ModelForm):
             raise forms.ValidationError('A title is required.')
         return title
 
+    def clean_description(self):
+        return self._clean_text(self.cleaned_data.get('description'))
+
+    def clean_hypothesis(self):
+        return self._clean_text(self.cleaned_data.get('hypothesis'))
+
+    def clean_conclusion(self):
+        return self._clean_text(self.cleaned_data.get('conclusion'))
+
+    def _clean_text(self, value):
+        text = value or ''
+        if len(text) > MAX_TEXT_LENGTH:
+            raise forms.ValidationError(
+                f'This text is longer than {MAX_TEXT_LENGTH} characters.'
+            )
+        return text
+
     def clean_attachments(self):
         uploads = self.cleaned_data.get('attachments') or []
         for upload in uploads:
             validate_upload(upload)
+        total = sum(getattr(upload, 'size', 0) or 0 for upload in uploads)
+        if total > MAX_TOTAL_UPLOAD_BYTES:
+            raise forms.ValidationError(
+                'Attachments are larger than '
+                f'{MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)} MB in total.'
+            )
         return uploads

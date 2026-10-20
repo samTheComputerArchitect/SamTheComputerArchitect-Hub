@@ -1,74 +1,746 @@
 {% extends 'base.html' %}
 
+{% load static %}
+
 {% block page_name %}Research Paper{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'js/vendor/codemirror/codemirror.css' %}">
 <style>
     main {
-        padding: 20px 20px 16px;
+        padding: 0;
     }
     .page-header {
         display: none !important;
     }
-    .back-link {
-        display: inline-flex;
+
+    /* ------------------------------------------------------- toolbar -- */
+    /* the same slim, always reachable bar the writing pages use */
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
         align-items: center;
-        gap: 7px;
-        color: var(--text-secondary);
-        font-size: 13px;
-        text-decoration: none;
-        margin-bottom: 14px;
-        transition: color 0.15s;
+        gap: 14px;
+        height: 52px;
+        padding: 0 24px;
+        background: rgba(9, 10, 10, 0.86);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border-light);
     }
-    .back-link:hover {
-        color: var(--color-primary);
-    }
-    .paper-shell {
-        background: #1a1a1a;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        padding: 60px 40px;
-        text-align: center;
-    }
-    .paper-title {
-        font-size: 24px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 10px;
-    }
-    .paper-lead {
-        font-size: 14px;
-        color: var(--text-secondary);
-        line-height: 1.7;
-        max-width: 52ch;
-        margin: 0 auto;
-    }
-    .paper-note {
+    .topbar-crumb {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        margin-top: 26px;
-        padding: 7px 13px;
-        border: 1px dashed var(--border);
-        border-radius: 3px;
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+        font-size: 12px;
         color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+    }
+    .topbar-crumb:hover {
+        color: var(--color-primary);
+    }
+    .topbar-crumb .sep {
+        color: var(--text-nav);
+    }
+    .topbar-crumb .here {
+        color: var(--text-secondary);
+    }
+    .topbar-crumb svg {
+        flex: 0 0 auto;
+        opacity: 0.7;
+    }
+    .topbar-spacer {
+        flex: 1;
+    }
+    .topbar-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .topbar-hint.hint-errors {
+        color: var(--color-danger-light);
+    }
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 40px;
+        padding: 0 22px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: opacity 0.15s;
+    }
+    .btn-primary:hover {
+        opacity: 0.9;
+    }
+    .btn-primary:disabled {
+        opacity: 0.7;
+        cursor: default;
+    }
+
+    /* ------------------------------------------------------- studio -- */
+    /* the editor holds the writing, the preview holds the pdf - the two
+       sides split the whole viewport, so neither one scrolls the page */
+    .studio-shell {
+        padding: 20px;
+    }
+    /* nav 43px + topbar 52px + the shell's 20px of breathing room above
+       and below the panels - the studio fills exactly the remainder */
+    .paper-studio {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+        height: calc(100vh - 43px - 52px - 40px);
+        min-height: 420px;
+    }
+    .studio-editor,
+    .studio-preview {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .studio-bar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 38px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .studio-bar svg {
+        flex: 0 0 auto;
+    }
+    .studio-file {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .studio-meta {
+        margin-left: auto;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+    }
+    .studio-body {
+        flex: 1;
+        min-height: 0;
+    }
+    @media (max-width: 1060px) {
+        .paper-studio {
+            grid-template-columns: minmax(0, 1fr);
+            height: auto;
+        }
+        .studio-editor,
+        .studio-preview {
+            min-height: 60vh;
+        }
+    }
+    @media (max-width: 700px) {
+        .studio-shell {
+            padding: 14px 12px;
+        }
+    }
+
+    /* ------------------------------------------------------- editor -- */
+    .paper-editor {
+        height: 100%;
+    }
+    /* the vendored CodeMirror, re-skinned with the app's own tokens */
+    .CodeMirror {
+        height: 100%;
+        font-family: var(--font-mono);
+        font-size: 16px;
+        line-height: 1.7;
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+    }
+    .CodeMirror-gutters {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+    }
+    .CodeMirror-linenumber {
+        color: var(--text-muted);
+        font-size: 12px;
+        padding: 0 10px 0 14px;
+    }
+    .CodeMirror-cursor,
+    .CodeMirror-drop-alpha .CodeMirror-cursor {
+        border-left: 2px solid var(--color-primary);
+    }
+    .CodeMirror-selected {
+        background: rgba(82, 148, 226, 0.2);
+    }
+    .CodeMirror-focused .CodeMirror-selected {
+        background: rgba(82, 148, 226, 0.26);
+    }
+    .CodeMirror-activeline-background {
+        background: rgba(255, 255, 255, 0.03);
+    }
+    /* the syntax palette: light tints of the app's accents, chosen to stay
+       readable on the near-black editor backdrop. The vendor stylesheet
+       writes `.cm-s-default .cm-tag`, so these need the extra .paper-editor
+       scope to outrank it. */
+    /* \commands - documentclass, usepackage, begin, section */
+    .paper-editor span.cm-tag,
+    .paper-editor span.cm-keyword {
+        color: #7ab3ec;
+    }
+    /* the lightest blue for defined helpers */
+    .paper-editor span.cm-builtin,
+    .paper-editor span.cm-def {
+        color: #a3cdf3;
+    }
+    /* the arguments they carry - {article}, [11pt], numbers */
+    .paper-editor span.cm-atom,
+    .paper-editor span.cm-number {
+        color: #f0c96e;
+    }
+    /* labels, citations and other bracket names */
+    .paper-editor span.cm-variable-2 {
+        color: #8ed3e8;
+    }
+    .paper-editor span.cm-string {
+        color: #7fd8a8;
+    }
+    /* the braces and brackets themselves */
+    .paper-editor span.cm-bracket {
+        color: #b6c2d4;
+    }
+    /* comments after % */
+    .paper-editor span.cm-comment {
+        color: #9aa6b8;
+    }
+    .paper-editor span.cm-error {
+        color: var(--color-danger-light);
+    }
+
+    /* ------------------------------------------------------ preview -- */
+    .pdf-holder {
+        display: flex;
+        padding: 12px;
+    }
+    .preview-frame {
+        flex: 1;
+        width: 100%;
+        height: 100%;
+        display: block;
+        border: 0;
+        border-radius: 3px;
+        background: #ffffff;
+    }
+    .preview-frame[hidden] {
+        display: none;
+    }
+    .preview-errors {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .preview-errors[hidden] {
+        display: none;
+    }
+    .error-note {
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--text-secondary);
+    }
+    .preview-error {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--color-danger-light);
+    }
+    .preview-error .line {
+        color: var(--text-muted);
+        margin-right: 6px;
+    }
+
+    /* --------------------------------------------------------- vim -- */
+    /* the studio bar carries a mode readout while vim emulation is on */
+    .vim-readout {
+        display: none;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 2px 8px;
+        text-transform: uppercase;
+    }
+    .vim-readout.is-on {
+        display: inline-block;
+    }
+    .paper-editor.mode-normal .vim-readout {
+        color: var(--color-primary-light);
+        border-color: rgba(122, 179, 236, 0.45);
+    }
+    /* the block cursor of normal mode is the app's own blue */
+    .paper-editor .cm-fat-cursor .CodeMirror-cursor {
+        width: auto;
+        background: var(--color-primary);
+        border: 0 !important;
+    }
+    .paper-editor .CodeMirror-dialog {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        padding: 6px 14px;
+        border-bottom: 1px solid var(--border);
+    }
+    .paper-editor .CodeMirror-dialog input {
+        color: var(--text-primary);
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: 3px;
+        padding: 2px 8px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+    }
+    .paper-editor .CodeMirror-search-match {
+        background: var(--color-primary-soft);
+        border-top: 1px solid var(--color-primary);
+        border-bottom: 1px solid var(--color-primary);
     }
 </style>
 
-<a class="back-link" href="{% url 'research_project' project.pk %}">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-    {{ project.acronym }}
-</a>
+<div class="topbar" role="toolbar" aria-label="Paper toolbar">
+    <a class="topbar-crumb" href="{% url 'research_project' project.pk %}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+        {{ project.acronym }}
+        <span class="sep">/</span>
+        <span class="here">Research Paper</span>
+    </a>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-hint" id="save-hint">Waiting for the first compile</span>
+    <button type="button" class="btn-primary" id="compile-btn">Compile</button>
+</div>
 
-<section class="paper-shell">
-    <h1 class="paper-title">Create your research paper here</h1>
-    <p class="paper-lead">
-        The paper editor for <strong>{{ project.acronym }}</strong> is being built. Your experiments,
-        files, hypotheses and conclusions will be pulled straight into the draft.
-    </p>
-    <div class="paper-note">Nothing to fill in yet</div>
-</section>
+<div class="studio-shell">
+    <div class="paper-studio">
+        <section class="studio-editor" aria-label="LaTeX editor">
+            <div class="studio-bar">
+                <span class="studio-file">paper.tex</span>
+                <span class="vim-readout" id="vim-readout">Insert</span>
+                <span class="studio-meta" id="editor-meta">Ln 1, Col 1</span>
+            </div>
+            {{ paper.source|json_script:"paper-source-data" }}
+            {{ vim_flags|json_script:"vim-flags-data" }}
+            <div class="studio-body">
+                <div class="paper-editor" id="paper-editor"></div>
+            </div>
+        </section>
+
+        <section class="studio-preview" aria-label="Paper preview">
+            <div class="studio-bar">
+                <span class="studio-file">Preview</span>
+                <span class="studio-meta" id="preview-meta">Not compiled yet</span>
+            </div>
+            <div class="studio-body pdf-holder">
+                <iframe class="preview-frame" id="preview-frame" title="Compiled paper" src="about:blank"></iframe>
+                <div class="preview-errors" id="preview-errors" hidden></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script src="{% static 'js/vendor/codemirror/codemirror.js' %}"></script>
+<script src="{% static 'js/vendor/codemirror/stex.js' %}"></script>
+<script src="{% static 'js/vendor/codemirror/active-line.js' %}"></script>
+{% if vim_flags.enabled %}
+<link rel="stylesheet" href="{% static 'js/vendor/codemirror/dialog.css' %}">
+<script src="{% static 'js/vendor/codemirror/searchcursor.js' %}"></script>
+<script src="{% static 'js/vendor/codemirror/matchbrackets.js' %}"></script>
+<script src="{% static 'js/vendor/codemirror/vim.js' %}"></script>
+<script src="{% static 'js/vendor/codemirror/dialog.js' %}"></script>
+{% endif %}
+<script>
+    (function () {
+        'use strict';
+
+        const COMPILE_URL = "{% url 'research_paper_compile' project.pk %}";
+        const PROJECT_URL = "{% url 'research_project' project.pk %}";
+        const CSRF_TOKEN = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        const DEBOUNCE = 1500;
+
+        const initialSource = JSON.parse(document.getElementById('paper-source-data').textContent);
+
+        const editor = CodeMirror(document.getElementById('paper-editor'), {
+            value: initialSource,
+            mode: 'stex',
+            lineNumbers: true,
+            lineWrapping: true,
+            styleActiveLine: true,
+            indentUnit: 2,
+            tabSize: 2,
+        });
+        editor.refresh();
+
+        /* the status line of the editor: cursor position and line count,
+           like a real IDE keeps its Ln/Col readout in the corner */
+        const editorMeta = document.getElementById('editor-meta');
+        function editorReadout() {
+            const cursor = editor.getCursor();
+            editorMeta.textContent = 'Ln ' + (cursor.line + 1) + ', Col ' + (cursor.ch + 1) +
+                ' · ' + editor.lineCount() + ' lines';
+        }
+        editor.on('cursorActivity', editorReadout);
+        editorReadout();
+
+        const saveHint = document.getElementById('save-hint');
+        const previewMeta = document.getElementById('preview-meta');
+        const frame = document.getElementById('preview-frame');
+        const errorsBox = document.getElementById('preview-errors');
+        const compileBtn = document.getElementById('compile-btn');
+
+        function stamp() {
+            /* toTimeString starts with the weekday, so slicing it produced
+               things like `Tue O`; build HH:MM by hand */
+            const d = new Date();
+            const hour = String(d.getHours()).padStart(2, '0');
+            const minute = String(d.getMinutes()).padStart(2, '0');
+            return hour + ':' + minute;
+        }
+
+        function showErrors(errors) {
+            frame.hidden = true;
+            errorsBox.hidden = false;
+            errorsBox.innerHTML = '';
+            const note = document.createElement('div');
+            note.className = 'error-note';
+            note.textContent = 'The document does not compile yet. Fix these and the pdf comes back on its own.';
+            errorsBox.appendChild(note);
+            errors.forEach(function (error) {
+                const item = document.createElement('div');
+                item.className = 'preview-error';
+                if (error.line) {
+                    const line = document.createElement('span');
+                    line.className = 'line';
+                    line.textContent = 'line ' + error.line + ' —';
+                    item.appendChild(line);
+                }
+                item.appendChild(document.createTextNode(error.message || ''));
+                errorsBox.appendChild(item);
+            });
+        }
+
+        let lastCompiledSource = null;
+        let lastAttemptedSource = null;
+        let readyBlobUrl = null;
+        let inFlight = false;
+        let queued = false;
+
+        async function compileNow(force) {
+            if (inFlight) {
+                queued = true;
+                return;
+            }
+            const source = editor.getValue();
+            /* an identical source is neither saved nor compiled again - the
+               same holds for a source that just failed: the errors are on
+               screen, and compiling it again on every pause only burns the
+               server. The Compile button always tries again. */
+            if (!force && source === lastAttemptedSource) {
+                saveHint.textContent = 'Draft saved ' + stamp();
+                return;
+            }
+            lastAttemptedSource = source;
+
+            inFlight = true;
+            compileBtn.disabled = true;
+            saveHint.classList.remove('hint-errors');
+            saveHint.textContent = 'Saving and compiling…';
+            try {
+                const response = await fetch(COMPILE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({ source: source }).toString(),
+                });
+                const contentType = (response.headers.get('content-type') || '').split(';')[0];
+                if (contentType === 'application/pdf' && response.ok) {
+                    const blob = await response.blob();
+                    if (readyBlobUrl) URL.revokeObjectURL(readyBlobUrl);
+                    readyBlobUrl = URL.createObjectURL(blob);
+                    frame.hidden = false;
+                    errorsBox.hidden = true;
+                    frame.src = readyBlobUrl;
+                    lastCompiledSource = source;
+                    const seconds = response.headers.get('X-Compile-Seconds');
+                    previewMeta.textContent = seconds
+                        ? 'Compiled in ' + seconds + ' s'
+                        : 'Compiled';
+                    saveHint.textContent = 'Draft saved ' + stamp();
+                } else {
+                    /* the server may have answered with an html error page
+                       (proxy, 413, 405): stay quiet about the json instead
+                       of dying and calling it a lost connection */
+                    let data = null;
+                    try {
+                        data = await response.json();
+                    } catch (parseError) {
+                        data = null;
+                    }
+                    if (data && Array.isArray(data.errors) && data.errors.length) {
+                        showErrors(data.errors);
+                        previewMeta.textContent = data.errors.length + ' compile error' +
+                            (data.errors.length === 1 ? '' : 's');
+                    } else {
+                        showErrors([{
+                            line: null,
+                            message: 'Compile failed (HTTP ' + response.status + ')',
+                        }]);
+                        previewMeta.textContent = 'Compile failed';
+                    }
+                    saveHint.classList.add('hint-errors');
+                    saveHint.textContent = 'Compile failed';
+                }
+            } catch (err) {
+                saveHint.textContent = 'Not connected';
+            } finally {
+                inFlight = false;
+                compileBtn.disabled = false;
+                if (queued) {
+                    queued = false;
+                    compileNow(false);
+                }
+            }
+        }
+
+        function compileFromUser() {
+            clearTimeout(autosaveTimer);
+            compileNow(true);
+        }
+
+        /* the pause in typing is the trigger: after 1.5 s of silence the
+           current source is saved and compiled in one request */
+        let autosaveTimer = null;
+        editor.on('change', function () {
+            saveHint.classList.remove('hint-errors');
+            saveHint.textContent = 'Changes not saved';
+            clearTimeout(autosaveTimer);
+            autosaveTimer = setTimeout(function () { compileNow(false); }, DEBOUNCE);
+        });
+
+        editor.setOption('extraKeys', {
+            'Ctrl-Enter': compileFromUser,
+            'Cmd-Enter': compileFromUser,
+        });
+        compileBtn.addEventListener('click', compileFromUser);
+
+        /* leaving the page mid-debounce would lose the last keystrokes,
+           so the flush travels with the unload */
+        window.addEventListener('pagehide', function () {
+            const source = editor.getValue();
+            if (source === lastCompiledSource) return;
+            const body = new FormData();
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            body.append('source', source);
+            navigator.sendBeacon(COMPILE_URL, body);
+        }, { once: true });
+
+        /* ------------------------------------------------- vim mode --
+           the settings app decides whether the emulation is on at all and
+           whether the standard hjkl motions keep their usual meanings
+           next to the jkl; scheme */
+        const VIM_FLAGS = JSON.parse(document.getElementById('vim-flags-data').textContent);
+        const vimReadout = document.getElementById('vim-readout');
+        const editorRoot = document.getElementById('paper-editor');
+
+        function vimReadoutUpdate(mode) {
+            vimReadout.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+            editorRoot.classList.toggle('mode-normal', mode !== 'insert');
+        }
+
+        if (VIM_FLAGS.enabled) {
+            editor.setOption('keyMap', 'vim');
+            const Vim = CodeMirror.Vim;
+
+            /* ------------------------------------------ the system clipboard --
+               Vim's "+ register is the system clipboard. CodeMirror's vim
+               emulation only knows its own registers, so the register is
+               defined here: a yank into it ("+y, "+yy, "+yw ...) writes
+               to the clipboard, and "+p reads the clipboard back into the
+               document. */
+            let clipboardText = '';
+
+            function writeToClipboard(text) {
+                clipboardText = text;
+                if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    console.warn('This browser cannot write to the clipboard');
+                    return;
+                }
+                navigator.clipboard.writeText(text).catch(function (err) {
+                    console.warn('Could not write to the clipboard', err);
+                });
+            }
+
+            const clipboardRegister = {
+                linewise: false,
+                blockwise: false,
+                setText: function (text, linewise, blockwise) {
+                    this.linewise = !!linewise;
+                    this.blockwise = !!blockwise;
+                    writeToClipboard(text);
+                },
+                pushText: function (text, linewise) {
+                    if (linewise) this.linewise = true;
+                    writeToClipboard(clipboardText + text);
+                },
+                clear: function () {
+                    clipboardText = '';
+                },
+                toString: function () {
+                    return clipboardText;
+                },
+            };
+
+            if (Vim.defineRegister) {
+                try {
+                    Vim.defineRegister('+', clipboardRegister);
+                } catch (registerError) {
+                    // the register is already defined - nothing to do
+                }
+            }
+
+            async function pasteFromClipboard(before) {
+                let text = '';
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    try {
+                        text = await navigator.clipboard.readText();
+                    } catch (readError) {
+                        console.warn('Could not read the clipboard', readError);
+                    }
+                }
+                if (!text) {
+                    saveHint.classList.add('hint-errors');
+                    saveHint.textContent = 'The clipboard is empty or blocked - use Ctrl+V instead';
+                    return;
+                }
+                clipboardText = text;
+                const cursor = editor.getCursor();
+                const line = editor.getLine(cursor.line);
+                /* a trailing newline means the clipboard holds whole lines */
+                const linewise = /\n$/.test(text);
+                if (linewise) {
+                    const at = { line: cursor.line + (before ? 0 : 1), ch: 0 };
+                    editor.replaceRange(text.replace(/\n$/, ''), at);
+                } else {
+                    const ch = before ? cursor.ch : Math.min(cursor.ch + 1, line.length);
+                    editor.replaceRange(text, { line: cursor.line, ch: ch });
+                }
+            }
+
+            /* "+p is handled here: reading the clipboard is asynchronous,
+               while the vim emulation pastes synchronously. The listener
+               sits in the capture phase, so the key never reaches the vim
+               key map and no half finished paste is left behind. */
+            let sawQuote = false;
+            let sawPlus = false;
+            editor.getWrapperElement().addEventListener('keydown', function (e) {
+                const vimState = editor.state.vim;
+                if (!vimState || vimState.insertMode) {
+                    sawQuote = false;
+                    sawPlus = false;
+                    return;
+                }
+                if (e.key === '"') {
+                    sawQuote = true;
+                    sawPlus = false;
+                    return;
+                }
+                if (sawQuote && e.key === '+') {
+                    sawQuote = false;
+                    sawPlus = true;
+                    return;
+                }
+                if (sawPlus && (e.key === 'p' || e.key === 'P')) {
+                    sawQuote = false;
+                    sawPlus = false;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    pasteFromClipboard(e.key === 'P');
+                    return;
+                }
+                sawQuote = false;
+                sawPlus = false;
+            }, true);
+
+            /* jk pressed in quick succession leaves insert mode: the chord
+               is bound for the insert context only, so in normal mode j is
+               a single unbuffered motion */
+            Vim.map('jk', '<Esc>', 'insert');
+
+            /* the jkl; scheme -- j left, k down, l up, ; right -- applies
+               to normal and visual mode; insert stays plain typing. the
+               aliases point straight at the underlying motions: pointing
+               them at other letters would expand recursively and every
+               direction collapses into plain left */
+            Vim.mapCommand('j', 'motion', 'moveByCharacters', { forward: false });
+            Vim.mapCommand('k', 'motion', 'moveByLines', { forward: true, linewise: true });
+            Vim.mapCommand('l', 'motion', 'moveByLines', { forward: false, linewise: true });
+            Vim.mapCommand(';', 'motion', 'moveByCharacters', { forward: true });
+
+            /* when the standard hjkl is switched off, the leftover stock
+               motion h joins the rest of the alphabet: jkl; is then the
+               only way to move. the stock entries carry no context, so
+               unmap without one clears them everywhere */
+            if (!VIM_FLAGS.keep_hjkl) {
+                while (Vim.unmap('h')) { /* every stock-agnostic copy of h */ }
+            }
+
+            /* the ex line: :w saves and compiles, :q goes back to the
+               project, :wq does both -- the flush rides the unload */
+            Vim.defineEx('w', 'w', function () {
+                compileFromUser();
+            });
+            Vim.defineEx('wq', 'wq', function () {
+                const body = new FormData();
+                body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+                body.append('source', editor.getValue());
+                navigator.sendBeacon(COMPILE_URL, body);
+                window.location.href = PROJECT_URL;
+            });
+            Vim.defineEx('q', 'q', function () {
+                window.location.href = PROJECT_URL;
+            });
+
+            editor.on('vim-mode-change', function (e) {
+                if (e.mode) vimReadoutUpdate(e.mode);
+            });
+
+            /* a document of prose wants to start in insert mode: the
+               editor opens ready to type, jk or Esc enters normal mode */
+            CodeMirror.Vim.handleKey(editor, 'i');
+            vimReadout.classList.add('is-on');
+        }
+        vimReadoutUpdate(VIM_FLAGS.enabled
+            ? ((editor.state.vim && editor.state.vim.insertMode) ? 'insert' : 'normal')
+            : 'insert');
+
+        compileNow(false);
+    })();
+</script>
 {% endblock %}

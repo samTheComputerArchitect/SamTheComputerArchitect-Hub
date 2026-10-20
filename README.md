@@ -24,12 +24,14 @@ as two separate steps, with every card showing which one you are at.
 | --- | --- |
 | **Thumbnails** | A 1280 × 720 canvas editor: layers, snapping guides, shapes, text, image filters, undo/redo, PNG export. |
 | **Notes** | An infinite canvas for ink, sticky notes, headings and images, organised into notebooks → sections → tabs. |
-| **Research** | Projects with tags and statuses, live search, and experiments with hypotheses, conclusions and file attachments. |
+| **Research** | Projects with tags and statuses, live search, experiments with hypotheses, conclusions and file attachments — and a LaTeX **paper studio** that compiles and previews the paper next to the editor. |
 | **Videos / Editing** | Placeholders for the next two parts of the workflow. |
-| **Settings** | API key storage (Ollama Cloud today) and a models panel. |
+| **Settings** | API key storage (Ollama Cloud today), a models panel and the editor preferences (vim mode, the `hjkl` motions). |
 
 Everything runs locally on SQLite, with **no build step and no node_modules** — the front end
 is hand written HTML, CSS and JavaScript served straight from `templates/` and `static/`.
+The one third party piece, the CodeMirror editor, is vendored into `static/js/vendor/` so the
+project still installs and runs with nothing but Python.
 
 ## Install
 
@@ -117,13 +119,46 @@ A canvas editor that lives in the browser and talks to Django over a small JSON 
   its own colour, stored in the database so you can restyle them from the admin.
 - **Live search and filtering** — the grid updates as you type, with no page reload and no
   query string in the address bar. Tags and statuses compose with the search.
-- **A page per project** — details in the header, experiments below as a four-across card grid.
+- **A page per project** — a compact hero, the experiments as a card grid and the long
+  write-up in a sticky sidebar.
 - **Experiments** — title, description and hypothesis when you create it, and the conclusion
   afterwards, once the experiment has actually run. Every card says which state it is in.
-- **File attachments** — any file type, up to 25 MB each, removable later.
-- **A research paper page** per project. The editor is the next thing to build.
+- **A page per experiment** — clicking a card opens a read-only view with everything the
+  experiment holds: what was done, what was expected, what happened, the dates and the
+  files. The *Edit* button still opens the full form, and the conclusion page stays the
+  place where the result is written down.
+- **File attachments** — up to 25 MB each (100 MB per submit) from a fixed list of types
+  (pdf, txt, md, csv, json, log, py, ipynb, images, archives, office documents, audio and
+  video), removable later.
+- **A file viewer** — click a file and it opens in a read-only code editor with syntax
+  highlighting for code files, line numbers and the theme's own colours. Files that are not
+  valid UTF-8 (a picture, an archive) say so instead of pretending to be text, and a file
+  over 512 KB is shown truncated. Every file has a download button of its own.
+- **A research paper page** per project — the paper studio, see below.
+
+### The paper studio
+
+Each project has a LaTeX paper that lives next to the work. The left side is the source, the
+right side is the compiled PDF, and the two talk to each other.
+
+- **A real editor** — CodeMirror with LaTeX syntax highlighting, line numbers, and the
+  project theme.
+- **Autosave and compile** — 1.5 s after you stop typing the source is saved and compiled;
+  the PDF replaces the preview as soon as it is ready, and the error list points at the
+  line that broke.
+- **Real LaTeX** — the source is compiled with `lualatex` (so Greek letters, dashes and
+  non-latin scripts work) and falls back to `pdflatex`. The run is sandboxed in a throwaway
+  directory, shell escapes are off and it is capped at 25 seconds.
+- **Vim mode** — optional, switched on in *Settings → Editor*. Normal, insert and visual
+  modes with the full keymap, a `jk` chord that leaves insert mode, and a `jkl;` scheme
+  that can replace the standard `hjkl` motions.
+- **The system clipboard** — `"+y` yanks to it, `"+p` pastes from it.
+- **Ex commands** — `:w` saves and compiles, `:q` goes back to the project, `:wq` does
+  both.
 
 ## Keyboard shortcuts
+
+### Thumbnail editor
 
 | Action | Shortcut |
 | --- | --- |
@@ -141,6 +176,18 @@ A canvas editor that lives in the browser and talks to Django over a small JSON 
 | Export a PNG | <kbd>Ctrl</kbd>+<kbd>E</kbd> |
 | Zoom to fit | <kbd>Ctrl</kbd>+<kbd>0</kbd> |
 
+### Paper editor (vim mode)
+
+| Action | Shortcut |
+| --- | --- |
+| Leave insert mode | <kbd>j</kbd> then <kbd>k</kbd> |
+| Save and compile | `:w` |
+| Back to the project | `:q` |
+| Save and leave | `:wq` |
+| Yank to the system clipboard | `"+y` |
+| Paste from the system clipboard | `"+p` |
+| Save and compile | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> |
+
 ## Configuration
 
 Everything lives in `SamTheComputerArchitectHub/settings.py`.
@@ -153,6 +200,7 @@ Everything lives in `SamTheComputerArchitectHub/settings.py`.
 | `DATABASES` | SQLite file | Swap for Postgres or MySQL when you outgrow it. |
 | `STATIC_URL` / `STATICFILES_DIRS` | `static/` | Where the CSS, JS and images live. |
 | `MEDIA_URL` / `MEDIA_ROOT` | `/media/`, `media/` | Where uploads are stored. |
+| `DATA_UPLOAD_MAX_MEMORY_SIZE` | 12 MB | The notes canvas posts pictures as base64 data urls (6 MB each) and the paper editor posts the whole source, so the body limit has to be above the app's own limits. |
 
 For production, run `python manage.py collectstatic` and serve `staticfiles/` and `media/`
 from your web server.
@@ -166,6 +214,7 @@ from your web server.
 | **Imaging** | Pillow 13 — server side sizing and upload validation |
 | **Database** | SQLite by default |
 | **Front end** | Vanilla HTML, CSS and JavaScript. No bundler, no framework, no CDN. |
+| **Editor** | CodeMirror 5.65 — vendored in `static/js/vendor/codemirror/`, with the modes for LaTeX, Python, JavaScript, JSON, CSS, HTML, Markdown, SQL, shell, YAML and more |
 | **Theming** | One dark theme built on CSS custom properties in `templates/base.html` |
 
 ## Layout
@@ -179,17 +228,24 @@ SamTheComputerArchitect-Hub/
 ├── editing/                      # Editing page
 ├── thumbnails/                   # Thumbnail editor
 ├── research/                     # Research app
+│   ├── migrations/               # …and the ResearchPaper model (0008)
 │   └── templatetags/             # truncate_chars, get_item
-├── settings/                     # Settings app (API keys)
+├── settings/                     # Settings app (API keys, editor preferences)
+│   └── migrations/               # …and the EditorSetting model (0002)
 ├── templates/                    # Every page, one folder per app
 │   ├── base.html                 # The theme: nav, modal, CSS variables
-│   ├── research/                 # research, detail, experiment_form, paper
+│   ├── research/                 # research, detail, experiment, experiment_form,
+│   │                             # experiment_view, experiment_file, paper
+│   ├── notes/                    # The notes canvas
+│   ├── settings/                 # The settings pages
 │   └── thumbnails/               # thumbnails, editor
 ├── static/
 │   ├── js/research-common.js     # Shared modals for the research pages
+│   ├── js/vendor/codemirror/     # The vendored editor and its syntax modes
 │   └── Logo.png
 ├── docs/                         # Images used in this README
 ├── media/                        # Uploads (git ignored)
+├── UI_UX_REDESIGN_REPORT.md      # Notes on the research app redesign
 ├── manage.py
 └── pyproject.toml
 ```
@@ -207,9 +263,14 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-The dev server reloads on changes. `python manage.py test` runs the suite — it covers the
-thumbnail API (element CRUD, uploads, colour validation, ownership), the research pages
-(search, filters, the experiment workflow, the conclusion indicator) and the notes API.
+The dev server reloads on changes to the Python code. Django 6.1 caches the compiled
+templates, so **a changed template needs a restart** — `touch research/views.py` is enough to
+make the server pick it up again.
+
+`python manage.py test` runs the suite — 269 tests covering the thumbnail API (element CRUD,
+uploads, colour validation, ownership), the notes API, the research pages (search, filters,
+the experiment workflow, the paper studio, the file viewer) and the settings. Every fix that
+went in came with a regression test that pins it.
 
 Pull requests are welcome. Keep the front end dependency-free — if it can be done in plain
 JavaScript, it should be — and match the existing style: the theme lives in

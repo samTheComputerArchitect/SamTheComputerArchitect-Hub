@@ -81,36 +81,17 @@
         color: var(--text-secondary);
         max-width: 90ch;
     }
-    .hero-stats {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 16px;
-        margin-top: 18px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border-light);
-    }
-    @media (max-width: 700px) {
-        .hero-stats {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-    }
-    .hero-stat {
-        min-width: 0;
-    }
-    .hero-stat .detail-label {
-        margin-bottom: 4px;
-    }
     .stat-value {
         font-size: 13px;
         color: var(--text-primary);
     }
-    .project-actions {
+    /* the two actions live in the hero column, under the status badge */
+    .hero-actions {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
         gap: 8px;
-        margin-top: 18px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border-light);
     }
     .tool-btn {
         display: inline-flex;
@@ -141,6 +122,51 @@
     .tool-btn-primary:hover {
         color: var(--bg-primary);
         opacity: 0.88;
+    }
+
+    /* ------------------------------------------------------------ layout -- */
+    /* The work is the point: the experiments get the wide column, the
+       context (dates, counts, the long write-up) gets a narrow rail. */
+    .detail-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 16px;
+        align-items: start;
+    }
+    .col-main {
+        min-width: 0;
+    }
+    .col-side {
+        min-width: 0;
+        position: sticky;
+        top: 16px;
+    }
+    .detail-pair {
+        margin-bottom: 14px;
+    }
+    .detail-pair:last-child {
+        margin-bottom: 0;
+    }
+    @media (max-width: 1060px) {
+        .detail-layout {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .col-side {
+            position: static;
+        }
+    }
+    @media (max-width: 700px) {
+        .project-hero-top {
+            flex-direction: column;
+            gap: 16px;
+        }
+        .project-hero-side {
+            align-items: flex-start;
+            width: 100%;
+        }
+        .hero-actions {
+            justify-content: flex-start;
+        }
     }
 
     /* -------------------------------------------------------------- body -- */
@@ -199,18 +225,12 @@
     /* ------------------------------------------------------ experiments -- */
     .experiment-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 20px;
-        margin-top: 16px;
     }
-    @media (max-width: 1450px) {
+    @media (min-width: 1450px) {
         .experiment-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-    }
-    @media (max-width: 1060px) {
-        .experiment-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
     @media (max-width: 680px) {
@@ -236,18 +256,17 @@
         border-color: var(--color-primary);
         box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
     }
-    .experiment-head {
+    /* the whole card is one link, the actions sit on top of it */
+    .experiment-link {
         display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-    }
-    .experiment-title a {
+        flex-direction: column;
+        gap: 10px;
         color: inherit;
         text-decoration: none;
     }
-    .experiment-title a:hover {
-        color: var(--color-primary);
+    .experiment-link:focus-visible {
+        outline: 1px solid var(--color-primary);
+        outline-offset: 4px;
     }
     .experiment-title {
         font-size: 15px;
@@ -482,6 +501,9 @@
         <div class="project-identity">
             <h1 class="project-acronym">{{ project.acronym }}</h1>
             <p class="project-full-form">{{ project.full_form }}</p>
+            {% if project.description %}
+                <p class="project-summary">{{ project.description }}</p>
+            {% endif %}
         </div>
         <div class="project-hero-side">
             <button type="button" class="status-badge" data-id="{{ project.id }}" data-status="{{ project.status }}" data-acronym="{{ project.acronym }}" title="Change status" aria-label="Change status of {{ project.acronym }}">
@@ -494,87 +516,89 @@
                     </a>
                 {% endfor %}
             </div>
+            <div class="hero-actions">
+                <a class="tool-btn tool-btn-primary" href="{% url 'research_paper' project.pk %}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="14" y2="17"></line></svg>
+                    Research Paper
+                </a>
+                <a class="tool-btn" href="{% url 'research_experiment_create' project.pk %}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    New Experiment
+                </a>
+            </div>
         </div>
-    </div>
-
-    {% if project.description %}
-        <p class="project-summary">{{ project.description }}</p>
-    {% endif %}
-
-    <div class="hero-stats">
-        <div class="hero-stat">
-            <span class="detail-label">Created</span>
-            <span class="stat-value">{{ project.created_at|date:"M j, Y" }}</span>
-        </div>
-        <div class="hero-stat">
-            <span class="detail-label">Status</span>
-            <span class="stat-value">{{ project.get_status_display }}</span>
-        </div>
-        <div class="hero-stat">
-            <span class="detail-label">Experiments</span>
-            <span class="stat-value">{{ experiments|length }}</span>
-        </div>
-        <div class="hero-stat">
-            <span class="detail-label">Attachments</span>
-            <span class="stat-value">{{ attachment_count }}</span>
-        </div>
-    </div>
-
-    <div class="project-actions">
-        <a class="tool-btn tool-btn-primary" href="{% url 'research_paper' project.pk %}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="14" y2="17"></line></svg>
-            Research Paper
-        </a>
-        <a class="tool-btn" href="{% url 'research_experiment_create' project.pk %}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            New Experiment
-        </a>
     </div>
 </section>
 
-<section class="panel">
-    <div class="panel-title">Overview</div>
-    <div class="panel-body">
-        {% if project.details %}
-            <div class="detail-text">{{ project.details }}</div>
-        {% else %}
-            <div class="detail-text muted">No long description yet.</div>
-        {% endif %}
+<div class="detail-layout">
+    <div class="col-main">
+        <section class="panel">
+            <div class="panel-title">Experiments <span class="panel-count">{{ experiments|length }}</span></div>
+            <div class="panel-body">
+                {% if experiments %}
+                    <div class="experiment-grid">
+                        {% for experiment in experiments %}
+                            <article class="experiment-card">
+                                <a class="experiment-link" href="{% url 'research_experiment_view' project.pk experiment.pk %}" aria-label="{{ experiment.title }}">
+                                    <span class="experiment-title">{{ experiment.title }}</span>
+                                    <span class="experiment-meta">
+                                        <span class="experiment-date">{{ experiment.created_at|date:"M j, Y" }}</span>
+                                        <span class="experiment-time">{{ experiment.created_at|date:"H:i" }}</span>
+                                    </span>
+                                    <span class="experiment-status{% if experiment.conclusion %} done{% else %} pending{% endif %}">
+                                        <span class="experiment-status-dot"></span>
+                                        {% if experiment.conclusion %}Conclusion added{% else %}No conclusion yet{% endif %}
+                                    </span>
+                                </a>
+                                <div class="experiment-actions">
+                                    <a class="icon-btn" href="{% url 'research_experiment_edit' project.pk experiment.pk %}">Edit</a>
+                                    <form method="post" action="{% url 'research_experiment_delete' project.pk experiment.pk %}" data-confirm="Delete '{{ experiment.title }}' and its files? This cannot be undone.">
+                                        {% csrf_token %}
+                                        <button type="submit" class="icon-btn danger" aria-label="Delete experiment" title="Delete experiment">&times;</button>
+                                    </form>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-note">
+                        No experiments yet.<br>
+                        <a href="{% url 'research_experiment_create' project.pk %}">Add the first experiment</a> and record what you tried, what you expected and what happened.
+                    </div>
+                {% endif %}
+            </div>
+        </section>
     </div>
-</section>
 
-{% if experiments %}
-    <div class="experiment-grid">
-        {% for experiment in experiments %}
-            <article class="experiment-card">
-                <div class="experiment-head">
-                    <h3 class="experiment-title">
-                        <a href="{% url 'research_experiment_edit' project.pk experiment.pk %}">{{ experiment.title }}</a>
-                    </h3>
+    <div class="col-side">
+        <section class="panel">
+            <div class="panel-title">Details</div>
+            <div class="panel-body">
+                <div class="detail-pair">
+                    <span class="detail-label">Created</span>
+                    <span class="stat-value">{{ project.created_at|date:"M j, Y" }}</span>
                 </div>
-                <div class="experiment-actions">
-                    <a class="icon-btn" href="{% url 'research_experiment_edit' project.pk experiment.pk %}">Edit</a>
-                    <form method="post" action="{% url 'research_experiment_delete' project.pk experiment.pk %}" data-confirm="Delete '{{ experiment.title }}' and its files? This cannot be undone.">
-                        {% csrf_token %}
-                        <button type="submit" class="icon-btn danger" aria-label="Delete experiment" title="Delete experiment">&times;</button>
-                    </form>
+                <div class="detail-pair">
+                    <span class="detail-label">Experiments</span>
+                    <span class="stat-value">{{ experiments|length }}</span>
                 </div>
+                <div class="detail-pair">
+                    <span class="detail-label">Attachments</span>
+                    <span class="stat-value">{{ attachment_count }}</span>
+                </div>
+            </div>
+        </section>
 
-                <div class="experiment-meta">
-                    <span class="experiment-date">{{ experiment.created_at|date:"M j, Y" }}</span>
-                    <span class="experiment-time">{{ experiment.created_at|date:"H:i" }}</span>
-                </div>
-                <div class="experiment-status{% if experiment.conclusion %} done{% else %} pending{% endif %}">
-                    <span class="experiment-status-dot"></span>
-                    {% if experiment.conclusion %}Conclusion added{% else %}No conclusion yet{% endif %}
-                </div>
-            </article>
-        {% endfor %}
+        <section class="panel">
+            <div class="panel-title">Overview</div>
+            <div class="panel-body">
+                {% if project.details %}
+                    <div class="detail-text">{{ project.details }}</div>
+                {% else %}
+                    <div class="detail-text muted">No long description yet.</div>
+                {% endif %}
+            </div>
+        </section>
     </div>
-{% else %}
-    <div class="empty-note">
-        No experiments yet.<br>
-        <a href="{% url 'research_experiment_create' project.pk %}">Add the first experiment</a> and record what you tried, what you expected and what happened.
-    </div>
-{% endif %}
+</div>
 {% endblock %}

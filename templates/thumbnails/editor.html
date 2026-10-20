@@ -1088,6 +1088,11 @@
     const LINE_HEIGHT = 1.2;
     const CANVAS_W = 1280;
     const CANVAS_H = 720;
+    // the server refuses longer element text - the editor has to know the
+    // same limit, otherwise the words are lost on the next reload
+    const MAX_ELEMENT_TEXT = 2000;
+    // the same bound the server puts on the element size
+    const MAX_ELEMENT_SIZE = 20000;
     const FONT_OPTIONS = ['JetBrains Mono', 'Arial', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Courier New', 'Impact', 'Comic Sans MS'];
     const SHAPE_OPTIONS = [['rectangle', 'Rectangle'], ['square', 'Square'], ['circle', 'Circle'], ['triangle', 'Triangle'], ['line', 'Line']];
     const SHAPE_LABELS = {};
@@ -1181,8 +1186,16 @@
                 headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString(),
             }).then(function (response) {
-                return response.json().then(function (data) {
-                    if (!response.ok) throw data;
+                return response.text().then(function (text) {
+                    let data = null;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        data = null;
+                    }
+                    // an html error page (proxy, 413, 405) is not json: the
+                    // reason would be lost if the parse error won
+                    if (!response.ok) throw data || { error: 'HTTP ' + response.status };
                     return data;
                 });
             });
@@ -1198,8 +1211,14 @@
         }
         return enqueue(function () {
             return fetch(url, { method: 'POST', body: form }).then(function (response) {
-                return response.json().then(function (data) {
-                    if (!response.ok) throw data;
+                return response.text().then(function (text) {
+                    let data = null;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        data = null;
+                    }
+                    if (!response.ok) throw data || { error: 'HTTP ' + response.status };
                     return data;
                 });
             });
@@ -1735,8 +1754,11 @@
 
     function saveBackground(flush) {
         const send = function () {
+            // Surface the failure the way element saves do — silently
+            // dropping POST errors left the background "stuck unsaved"
+            // with no indication anything was wrong.
             post(BACKGROUND_URL, { thumbnail: THUMB_ID, background_color: backgroundColor || '' })
-                .catch(function () {});
+                .catch(function () { setSaveState('error', 'Background not saved'); });
         };
         if (flush) { send(); return; }
         clearTimeout(bgSaveTimer);
@@ -1760,7 +1782,16 @@
             state.get(id)._textHooked = true;
             text.addEventListener('input', function () {
                 const live = state.get(id);
-                live.text = text.innerText.replace(/\u00a0/g, ' ');
+                let value = text.innerText.replace(/ /g, ' ');
+                if (value.length > MAX_ELEMENT_TEXT) {
+                    // the server refuses longer text, so the editor has to
+                    // stop here - otherwise the save fails and the words
+                    // are gone after the next reload
+                    value = value.slice(0, MAX_ELEMENT_TEXT);
+                    text.textContent = value;
+                    setSaveState('error', 'Text is limited to ' + MAX_ELEMENT_TEXT + ' characters');
+                }
+                live.text = value;
                 scheduleSave(id, { text: live.text });
                 fitText(id);
             });
@@ -2011,16 +2042,21 @@
         artboard.classList.add('busy');
 
         function layout(width, height, fontSize) {
-            const nw = toWorld(dir.x * width / 2, dir.y * height / 2);
-            const cx = A.x + nw.x;
-            const cy = A.y + nw.y;
-            data.x = anchorX(data, cx - width / 2, width);
-            data.y = cy - height / 2;
-            data.width = width;
+            // the server stores at most 20000 px per side, so the canvas
+            // must not offer more - otherwise the element shrinks again
+            // on the next reload
+            const nw = Math.min(MAX_ELEMENT_SIZE, Math.max(8, width));
+            const nh = Math.min(MAX_ELEMENT_SIZE, Math.max(2, height));
+            const nwWorld = toWorld(dir.x * nw / 2, dir.y * nh / 2);
+            const cx = A.x + nwWorld.x;
+            const cy = A.y + nwWorld.y;
+            data.x = anchorX(data, cx - nw / 2, nw);
+            data.y = cy - nh / 2;
+            data.width = nw;
             if (isText) {
                 data.font_size = fontSize;
             } else {
-                data.height = height;
+                data.height = nh;
             }
             positionLayer(el, data);
             restyleLayer(el, data);
@@ -2300,7 +2336,11 @@
         if (!selectedId) return;
         const data = state.get(selectedId);
         if (!data) return;
-        const target = nextZ() - 1;
+        // nextZ() is the first free slot above everything else: taking the
+        // current maximum instead would leave the element tied with another
+        // one (duplicated thumbnails share their z values) and it would not
+        // really come to the front.
+        const target = nextZ();
         if (data.z === target) return;
         pushUndo();
         data.z = target;
@@ -2722,18 +2762,35 @@
         // Always write to the element the panel was built for, never to
         // whatever happens to be selected while the user types.
         const targetId = opts.id !== undefined && opts.id !== null ? opts.id : (panelTargetId !== null ? panelTargetId : selectedId);
+        // The number input announces a range, but nothing enforced it: a
+        // typed 999999 left the layer enormous on screen while the server
+        // clamped the value it stored - the two disagreed until a reload.
+        const clamp = function (value) {
+            let v = value;
+            if (opts.min !== undefined && opts.min !== '' && v < opts.min) v = opts.min;
+            if (opts.max !== undefined && opts.max !== '' && v > opts.max) v = opts.max;
+            return v;
+        };
         const apply = function (value, commit) {
             const v = parseFloat(value);
             if (isNaN(v)) return;
-            opts.set(v);
-            if (commit) scheduleSave(targetId, opts.save(fieldsFrom(v, opts.field)), true);
+            const clamped = clamp(v);
+            if (clamped !== v) input.value = clamped;
+            opts.set(clamped);
+            if (commit) scheduleSave(targetId, opts.save(fieldsFrom(clamped, opts.field)), true);
         };
         gesture(input);
         input.addEventListener('input', function () { apply(input.value, false); });
         input.addEventListener('change', function () { apply(input.value, true); });
         input.addEventListener('blur', function () {
             const v = parseFloat(input.value);
-            if (!isNaN(v)) { opts.set(v); scheduleSave(targetId, opts.save(fieldsFrom(v, opts.field)), true); refreshPanel(); }
+            if (!isNaN(v)) {
+                const clamped = clamp(v);
+                input.value = clamped;
+                opts.set(clamped);
+                scheduleSave(targetId, opts.save(fieldsFrom(clamped, opts.field)), true);
+                refreshPanel();
+            }
         });
         panelBindings.push(function () {
             if (document.activeElement === input) return;
@@ -2971,7 +3028,7 @@
             numCell(grid2, 'Width', { field: 'width', min: 8, max: 4000, get: function () { return data.width; }, set: function (v) { data.width = v; applyAll(); }, save: fieldsToParams });
             numCell(grid2, 'Height', { field: 'height', min: 8, max: 4000, get: function () { return data.height; }, set: function (v) { data.height = v; applyAll(); }, save: fieldsToParams });
         }
-        numCell(grid2, 'Rotation °', { field: 'rotation', min: -360, max: 360, get: function () { return data.rotation || 0; }, set: function (v) { data.rotation = ((Math.round(v) % 360) + 360) % 360; applyAll(); }, save: fieldsToParams });
+        numCell(grid2, 'Rotation °', { field: 'rotation', min: -360, max: 360, get: function () { return data.rotation || 0; }, set: function (v) { data.rotation = ((Math.round(v) % 360) + 360) % 360; applyAll(); }, save: function () { return { rotation: data.rotation }; } });
         const transformActions = el('div', 'chip-row', transform);
         transformActions.style.marginTop = '10px';
         const centerBtn = el('button', 'tool-btn', transformActions);
@@ -3514,7 +3571,9 @@
                 postMultipart(ELEMENT_CREATE_URL, form, Object.assign({ z: baseZ + index }, position)).then(function (fresh) {
                     fresh.image_name = fresh.image_name || file.name;
                     reAddElement(fresh);
-                }).catch(function () {});
+                }).catch(function () {
+                    setSaveState('error', 'Upload failed: ' + (file.name || 'file'));
+                });
             });
         });
     }
@@ -3601,7 +3660,14 @@
             const value = input.value.trim() || original;
             nameEl.textContent = value;
             if (value !== original) {
-                post(RENAME_URL, { id: THUMB_ID, name: value });
+                post(RENAME_URL, { id: THUMB_ID, name: value }).then(function (data) {
+                    if (!data || !data.name) {
+                        // the server refused the name: put the old one back
+                        nameEl.textContent = original;
+                    }
+                }).catch(function () {
+                    nameEl.textContent = original;
+                });
             }
         }
         input.addEventListener('blur', finish);

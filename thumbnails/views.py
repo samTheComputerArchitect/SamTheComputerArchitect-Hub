@@ -7,6 +7,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 import base64
+import math
 import os
 import re
 import uuid
@@ -18,6 +19,10 @@ CANVAS_H = 720
 
 MAX_NAME_LENGTH = 255
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+MAX_ELEMENT_TEXT_LENGTH = 2000
+MAX_ELEMENT_DIMENSION = 20000
+MIN_FONT_SIZE = 8
+MAX_FONT_SIZE = 400
 
 MEDIA_PATH_RE = re.compile(r'^(thumbnail_elements|thumbnails)/([A-Za-z0-9_.-]+)$')
 SNAPSHOT_IMAGE_RE = re.compile(r'^data:image/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$')
@@ -102,16 +107,25 @@ def _serialize(element):
 
 
 def _float(value, default=0.0):
+    """Parse a float, refusing the values that poison a FloatField.
+
+    `nan` and `inf` parse fine but they wreck every comparison that comes
+    after them (`max(nan, 8)` is still nan), so they are treated as junk.
+    """
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(parsed):
+        return default
+    return parsed
 
 
 def _int(value, default=0):
+    """Parse an int. `int(float('inf'))` raises OverflowError, not ValueError."""
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -127,13 +141,20 @@ def _natural_size(image_field):
 
 
 def thumbnails(request):
+    thumbs = list(Thumbnail.objects.all().order_by('-created_at'))
+    # One query for the topmost image of every gallery card. The old code
+    # ran one elements query per thumbnail (N+1) just to pick a preview.
+    top_images = {}
+    for element in (
+        ThumbnailElement.objects
+        .filter(kind=ThumbnailElement.KIND_IMAGE, thumbnail__in=thumbs)
+        .order_by('thumbnail_id', '-z_index', '-id')
+    ):
+        top_images.setdefault(element.thumbnail_id, element)
+
     thumb_items = []
-    for thumb in Thumbnail.objects.all().order_by('-created_at'):
-        preview = (
-            thumb.elements.filter(kind=ThumbnailElement.KIND_IMAGE)
-            .order_by('-z_index', '-id')
-            .first()
-        )
+    for thumb in thumbs:
+        preview = top_images.get(thumb.pk)
         preview_url = None
         if preview is not None and preview.image:
             try:
@@ -171,20 +192,22 @@ def create_thumbnail(request):
 
 @require_POST
 def rename_thumbnail(request):
-    thumb = Thumbnail.objects.filter(pk=request.POST.get('id')).first()
+    thumb = Thumbnail.objects.filter(pk=_int(request.POST.get('id'), 0)).first()
     if thumb is None:
         return JsonResponse({'error': 'Thumbnail not found'}, status=404)
 
     name = (request.POST.get('name') or '').strip()[:MAX_NAME_LENGTH]
-    if name:
-        thumb.name = name
-        thumb.save()
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+    thumb.name = name
+    thumb.save()
     return JsonResponse({'id': thumb.pk, 'name': thumb.name})
 
 
 @require_POST
 def background_update(request):
-    thumb = Thumbnail.objects.filter(pk=request.POST.get('thumbnail') or request.POST.get('id')).first()
+    thumb_id = _int(request.POST.get('thumbnail') or request.POST.get('id'), 0)
+    thumb = Thumbnail.objects.filter(pk=thumb_id).first()
     if thumb is None:
         return JsonResponse({'error': 'Thumbnail not found'}, status=404)
 
@@ -202,7 +225,7 @@ def background_update(request):
 
 @require_POST
 def delete_thumbnail(request):
-    thumb = Thumbnail.objects.filter(pk=request.POST.get('id')).first()
+    thumb = Thumbnail.objects.filter(pk=_int(request.POST.get('id'), 0)).first()
     if thumb is None:
         return JsonResponse({'error': 'Thumbnail not found'}, status=404)
     thumb.delete()
@@ -211,7 +234,7 @@ def delete_thumbnail(request):
 
 @require_POST
 def duplicate_thumbnail(request):
-    original = Thumbnail.objects.filter(pk=request.POST.get('id')).first()
+    original = Thumbnail.objects.filter(pk=_int(request.POST.get('id'), 0)).first()
     if original is None:
         return JsonResponse({'error': 'Thumbnail not found'}, status=404)
 
@@ -307,7 +330,7 @@ def _materialize_image(request):
 
 @require_POST
 def element_create(request):
-    thumb = Thumbnail.objects.filter(pk=request.POST.get('thumbnail')).first()
+    thumb = Thumbnail.objects.filter(pk=_int(request.POST.get('thumbnail'), 0)).first()
     if thumb is None:
         return JsonResponse({'error': 'Thumbnail not found'}, status=404)
 
@@ -358,12 +381,15 @@ def element_create(request):
         text = (request.POST.get('text') or '').strip()
         if not text:
             return JsonResponse({'error': 'Text is required'}, status=400)
+        if len(text) > MAX_ELEMENT_TEXT_LENGTH:
+            return JsonResponse({'error': 'Text is too long'}, status=400)
         element.text = text
         color = _clean_color(request.POST.get('color'), allow_transparent=True)
         if color is None:
             color = element.color
         element.color = color
         element.font_size = _float(request.POST.get('font_size'), 48)
+        element.font_size = min(max(element.font_size, MIN_FONT_SIZE), MAX_FONT_SIZE)
         element.bold = _clean_bool(request.POST.get('bold'), element.bold)
         align = request.POST.get('align')
         if align in ThumbnailElement.ALIGN_CHOICES:
@@ -375,14 +401,14 @@ def element_create(request):
 
     element.x = _float(request.POST.get('x'), element.x)
     element.y = _float(request.POST.get('y'), element.y)
-    element.width = max(element.width, 8)
+    element.width = min(max(element.width, 8), MAX_ELEMENT_DIMENSION)
     if kind == ThumbnailElement.KIND_IMAGE:
-        element.height = max(element.height, 8)
+        element.height = min(max(element.height, 8), MAX_ELEMENT_DIMENSION)
         element.brightness = _int(request.POST.get('brightness'), element.brightness)
         element.contrast = _int(request.POST.get('contrast'), element.contrast)
         element.saturation = _int(request.POST.get('saturation'), element.saturation)
     if kind == ThumbnailElement.KIND_SHAPE:
-        element.height = max(element.height, 2)
+        element.height = min(max(element.height, 2), MAX_ELEMENT_DIMENSION)
     if kind == ThumbnailElement.KIND_TEXT:
         element.italic = _clean_bool(request.POST.get('italic'), element.italic)
         element.letter_spacing = _float(request.POST.get('letter_spacing'), element.letter_spacing)
@@ -437,17 +463,24 @@ def element_create(request):
 
 @require_POST
 def element_update(request):
-    element_id = request.POST.get('id')
-    elements = ThumbnailElement.objects.filter(pk=element_id)
-    thumbnail_id = request.POST.get('thumbnail')
-    if thumbnail_id:
-        elements = elements.filter(thumbnail_id=thumbnail_id)
-    element = elements.first()
+    element_id = _int(request.POST.get('id'), 0)
+    element_filter = ThumbnailElement.objects.filter(pk=element_id)
+    # When a thumbnail scope is supplied it must restrict the lookup even
+    # when the value does not parse (0 matches nothing -> 404), never be
+    # silently dropped (that would allow cross-thumbnail edits).
+    if request.POST.get('thumbnail'):
+        element_filter = element_filter.filter(
+            thumbnail_id=_int(request.POST.get('thumbnail'), 0)
+        )
+    element = element_filter.first()
     if element is None:
         return JsonResponse({'error': 'Element not found'}, status=404)
 
     if 'text' in request.POST:
-        element.text = request.POST.get('text') or ''
+        new_text = request.POST.get('text') or ''
+        if len(new_text) > MAX_ELEMENT_TEXT_LENGTH:
+            return JsonResponse({'error': 'Text is too long'}, status=400)
+        element.text = new_text
 
     if 'shape' in request.POST and request.POST.get('shape') in ThumbnailElement.SHAPE_CHOICES:
         element.shape = request.POST.get('shape')
@@ -466,7 +499,11 @@ def element_update(request):
             setattr(element, key, max(_float(request.POST.get(key), getattr(element, key)), 8))
 
     if 'font_size' in request.POST and request.POST.get('font_size') != '':
-        element.font_size = min(max(element.font_size, 8), 400)
+        element.font_size = min(max(element.font_size, MIN_FONT_SIZE), MAX_FONT_SIZE)
+
+    for key in ('width', 'height'):
+        if key in request.POST and request.POST.get(key) != '':
+            setattr(element, key, min(getattr(element, key), MAX_ELEMENT_DIMENSION))
 
     for key in ('x', 'y', 'rotation', 'opacity'):
         if key in request.POST and request.POST.get(key) != '':
@@ -514,11 +551,11 @@ def element_update(request):
 
     element.x = min(max(element.x, -CANVAS_W), CANVAS_W)
     element.y = min(max(element.y, -CANVAS_H), CANVAS_H)
-    element.width = max(element.width, 8)
+    element.width = min(max(element.width, 8), MAX_ELEMENT_DIMENSION)
     if element.kind == ThumbnailElement.KIND_IMAGE:
-        element.height = max(element.height, 8)
+        element.height = min(max(element.height, 8), MAX_ELEMENT_DIMENSION)
     if element.kind == ThumbnailElement.KIND_SHAPE:
-        element.height = max(element.height, 2)
+        element.height = min(max(element.height, 2), MAX_ELEMENT_DIMENSION)
     element.opacity = min(max(element.opacity, 0), 1)
     element.brightness = min(max(element.brightness, 0), 200)
     element.contrast = min(max(element.contrast, 0), 200)
@@ -530,11 +567,12 @@ def element_update(request):
 
 @require_POST
 def element_delete(request):
-    element_id = request.POST.get('id')
+    element_id = _int(request.POST.get('id'), 0)
     elements = ThumbnailElement.objects.filter(pk=element_id)
-    thumbnail_id = request.POST.get('thumbnail')
-    if thumbnail_id:
-        elements = elements.filter(thumbnail_id=thumbnail_id)
+    if request.POST.get('thumbnail'):
+        # Same scoping rule as element_update: a present but unparseable
+        # thumbnail must not silently un-scope the delete.
+        elements = elements.filter(thumbnail_id=_int(request.POST.get('thumbnail'), 0))
     element = elements.first()
     if element is None:
         return JsonResponse({'error': 'Element not found'}, status=404)

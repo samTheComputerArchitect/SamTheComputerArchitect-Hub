@@ -1,0 +1,428 @@
+{% extends 'base.html' %}
+
+{% block page_name %}{{ experiment.title }}{% endblock %}
+
+{% block content %}
+<style>
+    main {
+        padding: 0;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .sheet {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 24px 80px;
+    }
+    /* the details on the left, the files and the actions on the right */
+    .view-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 640px) minmax(0, 280px);
+        gap: 40px;
+        align-items: start;
+    }
+    .col-read {
+        min-width: 0;
+    }
+    .col-side {
+        min-width: 0;
+        position: sticky;
+        top: 16px;
+    }
+    @media (max-width: 1060px) {
+        .view-layout {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .col-side {
+            position: static;
+        }
+    }
+    .sheet-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        margin-bottom: 28px;
+        transition: color 0.15s;
+    }
+    .sheet-crumb:hover {
+        color: var(--color-primary);
+    }
+    .sheet-crumb svg {
+        opacity: 0.7;
+    }
+    .sheet-title {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.25;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+        overflow-wrap: break-word;
+    }
+    .sheet-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 32px;
+    }
+    .recall {
+        border-left: 2px solid var(--border-light);
+        padding: 2px 0 2px 18px;
+        margin-bottom: 30px;
+    }
+    .recall-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 7px;
+    }
+    .recall-text {
+        font-size: 13px;
+        line-height: 1.75;
+        color: var(--text-secondary);
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+    }
+    .recall-text.muted {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    .empty-block {
+        border-left: 2px solid var(--border-light);
+        padding: 2px 0 2px 18px;
+        margin-bottom: 30px;
+    }
+    .empty-block .recall-label {
+        margin-bottom: 7px;
+    }
+    .empty-block p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    .panel {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .panel + .panel {
+        margin-top: 16px;
+    }
+    .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        border-bottom: 1px solid var(--border);
+    }
+    .panel-count {
+        margin-left: auto;
+        color: var(--text-muted);
+        font-weight: 400;
+        letter-spacing: 0;
+    }
+    .panel-body {
+        padding: 16px;
+    }
+    .existing-files {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .existing-file {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        background: #131820;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+    }
+    .existing-file:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+    .existing-file:focus-visible {
+        outline: 1px solid var(--color-primary);
+        outline-offset: 2px;
+    }
+    .existing-file .name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .existing-file .size {
+        color: var(--text-muted);
+        font-size: 10px;
+    }
+    .file-download {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .file-download:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    /* the small download arrow inside the card */
+    .file-download {
+        cursor: pointer;
+    }
+    .file-download:focus-visible {
+        outline: 1px solid var(--color-primary);
+        outline-offset: 2px;
+    }
+    .empty-note {
+        padding: 8px 0;
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.7;
+    }
+    .view-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+    }
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        padding: 0 20px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: opacity 0.15s, background 0.15s;
+    }
+    .btn-primary:hover {
+        opacity: 0.9;
+    }
+    .btn-quiet {
+        display: inline-flex;
+        align-items: center;
+        height: 38px;
+        padding: 0 14px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .btn-quiet:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .detail-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        margin-bottom: 6px;
+    }
+    .stat-value {
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    .detail-pair {
+        margin-bottom: 14px;
+    }
+    .detail-pair:last-child {
+        margin-bottom: 0;
+    }
+    .done-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .done-note .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #52c48a;
+    }
+    .done-note .dot.empty {
+        background: #e2a852;
+    }
+</style>
+
+<div class="sheet">
+    <a class="sheet-crumb" href="{% url 'research_project' project.pk %}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+        {{ project.acronym }}
+    </a>
+
+    <h1 class="sheet-title">{{ experiment.title }}</h1>
+    <p class="sheet-sub">
+        Started {{ experiment.created_at|date:"M j, Y" }}
+        {% if experiment.updated_at != experiment.created_at %} &middot; last touched {{ experiment.updated_at|date:"M j, Y" }}{% endif %}
+    </p>
+
+    <div class="view-layout">
+        <div class="col-read">
+            {% if experiment.description %}
+                <div class="recall">
+                    <div class="recall-label">What I did</div>
+                    <div class="recall-text">{{ experiment.description }}</div>
+                </div>
+            {% else %}
+                <div class="empty-block">
+                    <div class="recall-label">What I did</div>
+                    <p>Nothing written down yet.</p>
+                </div>
+            {% endif %}
+
+            {% if experiment.hypothesis %}
+                <div class="recall">
+                    <div class="recall-label">What I expected</div>
+                    <div class="recall-text">{{ experiment.hypothesis }}</div>
+                </div>
+            {% else %}
+                <div class="empty-block">
+                    <div class="recall-label">What I expected</div>
+                    <p>No expectation was written down.</p>
+                </div>
+            {% endif %}
+
+            {% if experiment.conclusion %}
+                <div class="recall">
+                    <div class="recall-label">What happened</div>
+                    <div class="recall-text">{{ experiment.conclusion }}</div>
+                </div>
+            {% else %}
+                <div class="empty-block">
+                    <div class="recall-label">What happened</div>
+                    <p>The experiment has no conclusion yet.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="col-side">
+            <section class="panel">
+                <div class="panel-title">Files <span class="panel-count">{{ experiment.files.count }}</span></div>
+                <div class="panel-body">
+                    {% if experiment.files.all %}
+                        <div class="existing-files">
+                            {% for file in experiment.files.all %}
+                                <a class="existing-file" href="{% url 'research_experiment_file' project.pk experiment.pk file.pk %}" title="Open {{ file.original_name|default:file.file.name }}">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    <span class="name">{{ file.original_name|default:file.file.name }}</span>
+                                    {% if file.file.size %}<span class="size">{{ file.file.size|filesizeformat }}</span>{% endif %}
+                                    <span class="file-download" role="button" tabindex="0"
+                                          data-download-url="{{ file.file.url }}"
+                                          data-download-name="{{ file.original_name|default:file.file.name }}"
+                                          title="Download" aria-label="Download {{ file.original_name|default:file.file.name }}">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    </span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="empty-note">No files were attached to this experiment.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-title">Details</div>
+                <div class="panel-body">
+                    <div class="detail-pair">
+                        <span class="detail-label">Created</span>
+                        <span class="stat-value">{{ experiment.created_at|date:"M j, Y H:i" }}</span>
+                    </div>
+                    <div class="detail-pair">
+                        <span class="detail-label">Last touched</span>
+                        <span class="stat-value">{{ experiment.updated_at|date:"M j, Y H:i" }}</span>
+                    </div>
+                    <div class="detail-pair">
+                        <span class="detail-label">Conclusion</span>
+                        <span class="done-note">
+                            <span class="dot{% if not experiment.conclusion %} empty{% endif %}"></span>
+                            {% if experiment.conclusion %}Written{% else %}Not written yet{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <div class="view-actions">
+                <a class="btn-primary" href="{% url 'research_experiment_edit' project.pk experiment.pk %}">Edit</a>
+                <a class="btn-quiet" href="{% url 'research_experiment' project.pk experiment.pk %}">Conclusion</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        'use strict';
+
+        /* The card opens the file in the editor; the small arrow next to it
+           downloads the file instead. A nested <a download> would be invalid
+           markup inside the link of the card, so the download is triggered
+           from a small element inside the card. */
+        function downloadFile(url, name) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = name || '';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+
+        document.querySelectorAll('.file-download').forEach(function (button) {
+            const run = function (e) {
+                // the card is a link: the download must not open the file
+                e.preventDefault();
+                e.stopPropagation();
+                downloadFile(button.dataset.downloadUrl, button.dataset.downloadName);
+            };
+            button.addEventListener('click', run);
+            button.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                run(e);
+            });
+        });
+    })();
+</script>
+{% endblock %}

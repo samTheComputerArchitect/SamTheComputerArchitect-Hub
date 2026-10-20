@@ -126,11 +126,82 @@
     .tab-content.active {
         display: block;
     }
+    .editor-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        padding: 16px;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .editor-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-right: 4px;
+    }
+    .editor-name {
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    .editor-help {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.6;
+    }
+    .switch {
+        position: relative;
+        flex: 0 0 auto;
+        width: 40px;
+        height: 20px;
+        cursor: pointer;
+    }
+    .switch input {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
+    }
+    .switch-track {
+        position: absolute;
+        inset: 0;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        transition: background 0.15s, border-color 0.15s;
+    }
+    .switch-knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 2px;
+        background: var(--text-muted);
+        transition: transform 0.15s, background 0.15s;
+    }
+    .switch input:checked + .switch-track {
+        background: var(--color-primary-soft);
+        border-color: var(--color-primary);
+    }
+    .switch input:checked + .switch-track .switch-knob {
+        transform: translateX(20px);
+        background: var(--color-primary);
+    }
+    .switch input:disabled + .switch-track {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
 </style>
 
 <div class="settings-subnav">
     <a href="?tab=api_keys" class="settings-tab {% if active_tab == 'api_keys' %}active{% endif %}">API Keys</a>
     <a href="?tab=models" class="settings-tab {% if active_tab == 'models' %}active{% endif %}">Models</a>
+    <a href="?tab=editor" class="settings-tab {% if active_tab == 'editor' %}active{% endif %}">Editor</a>
 </div>
 {% endblock %}
 
@@ -161,9 +232,53 @@
         </div>
     </div>
 
+    <div id="editor" class="tab-content {% if active_tab == 'editor' %}active{% endif %}">
+        <h2 style="margin: 24px 24px 20px 24px; font-size: 24px;">Editor</h2>
+        <div style="padding: 0 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 900px;">
+            <div class="editor-item">
+                <div class="editor-row">
+                    <span class="editor-name">Vim mode in the paper editor</span>
+                    <label class="switch">
+                        <input type="checkbox" id="setting-vim" autocomplete="off">
+                        <span class="switch-track"><span class="switch-knob"></span></span>
+                    </label>
+                </div>
+                <span class="editor-help">
+                    Normal/insert/visual modes with the full vim keymap. Press
+                    <strong>j</strong> then <strong>k</strong> quickly while typing to
+                    leave insert mode; <strong>:w</strong> saves and compiles,
+                    <strong>:q</strong> goes back to the project.
+                    <strong>&quot;+y</strong> yanks to the system clipboard,
+                    <strong>&quot;+p</strong> pastes from it.
+                </span>
+            </div>
+            <div class="editor-item">
+                <div class="editor-row">
+                    <span class="editor-name">Keep the standard hjkl motions</span>
+                    <label class="switch">
+                        <input type="checkbox" id="setting-hjkl" autocomplete="off">
+                        <span class="switch-track"><span class="switch-knob"></span></span>
+                    </label>
+                </div>
+                <span class="editor-help">
+                    The remap always sends <strong>j</strong> left, <strong>k</strong>
+                    down, <strong>l</strong> up and <strong>;</strong> right. Turn this
+                    off to unbind h, j, k and l from their usual meanings and use
+                    jkl; as the only way to move.
+                </span>
+            </div>
+        </div>
+        <p style="margin: 14px 24px 0; font-size: 12px; color: var(--text-muted);">
+            The paper editor picks these up the next time the page loads. The remap only
+            reorders motions in normal and visual mode: while typing, letters insert as
+            usual, and the jk chord is what leaves insert mode.
+        </p>
+    </div>
+
 <script>
     const SAVE_URL = "{% url 'save_api_key' %}";
     const CSRF_TOKEN = '{{ csrf_token }}';
+    const activeTab = '{{ active_tab|default:"api_keys" }}';
 
     function getMaskedPrefix(key) {
         if (!key) return '***';
@@ -179,7 +294,8 @@
                 if (ollamaKey) {
                     const input = document.getElementById('ollama-key');
                     const prefix = document.getElementById('ollama-prefix');
-                    input.dataset.realValue = ollamaKey.key;
+                    // The key lives only in the field value — avoid a second
+                    // cleartext copy in data-* attributes (DOM dumps crawl).
                     input.value = ollamaKey.key;
                     prefix.textContent = getMaskedPrefix(ollamaKey.key);
                 }
@@ -194,10 +310,6 @@
     if (ollamaInput && ollamaPrefix) {
         ollamaInput.addEventListener('input', function() {
             ollamaPrefix.textContent = getMaskedPrefix(this.value);
-        });
-
-        ollamaInput.addEventListener('blur', function() {
-            this.dataset.realValue = this.value;
         });
     }
 
@@ -225,11 +337,16 @@
             });
             if (response.ok) {
                 showModal('Success', 'API Key saved successfully');
-                ollamaInput.dataset.realValue = key;
                 ollamaPrefix.textContent = getMaskedPrefix(key);
             } else {
-                const data = await response.json();
-                showModal('Error', data.error || 'Failed to save');
+                // an error page that is not json must not swallow the reason
+                let data = null;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    data = null;
+                }
+                showModal('Error', (data && data.error) || 'Failed to save (HTTP ' + response.status + ')');
             }
         } catch (e) {
             showModal('Error', 'An error occurred while saving');
@@ -239,9 +356,66 @@
         }
     });
 
+    const GET_EDITOR_URL = "{% url 'get_editor_settings' %}";
+    const SAVE_EDITOR_URL = "{% url 'save_editor_settings' %}";
+
+    const vimSwitch = document.getElementById('setting-vim');
+    const hjklSwitch = document.getElementById('setting-hjkl');
+
+    function syncHjklAvailability() {
+        hjklSwitch.disabled = !vimSwitch.checked;
+        hjklSwitch.closest('.editor-item').style.opacity = vimSwitch.checked ? '' : '0.6';
+    }
+
+    async function loadEditorSettings() {
+        try {
+            const response = await fetch(GET_EDITOR_URL);
+            if (response.ok) {
+                const settings = await response.json();
+                vimSwitch.checked = !!settings.vim;
+                hjklSwitch.checked = !!settings.hjkl;
+                syncHjklAvailability();
+            }
+        } catch (e) {
+            console.error('Failed to load editor settings', e);
+        }
+    }
+
+    async function saveEditorSettings() {
+        const body = new URLSearchParams();
+        body.append('vim', vimSwitch.checked);
+        body.append('hjkl', hjklSwitch.checked);
+        body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+        try {
+            const response = await fetch(SAVE_EDITOR_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF_TOKEN,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                vimSwitch.checked = !!data.vim;
+                hjklSwitch.checked = !!data.hjkl;
+                syncHjklAvailability();
+            } else {
+                showModal('Error', 'Failed to save editor settings');
+            }
+        } catch (e) {
+            showModal('Error', 'An error occurred while saving');
+        }
+    }
+
+    vimSwitch.addEventListener('change', saveEditorSettings);
+    hjklSwitch.addEventListener('change', saveEditorSettings);
+    syncHjklAvailability();
+    if (activeTab === 'editor') { loadEditorSettings(); }
+
     document.getElementById('copy-ollama').addEventListener('click', function() {
         const keyField = document.getElementById('ollama-key');
-        const valueToCopy = keyField.dataset.realValue || keyField.value;
+        const valueToCopy = keyField.value;
         navigator.clipboard.writeText(valueToCopy).then(() => {
             const originalText = this.textContent;
             this.textContent = 'Copied!';

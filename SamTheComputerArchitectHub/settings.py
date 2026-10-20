@@ -130,6 +130,13 @@ STATICFILES_DIRS = [
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# The notes canvas posts pictures as base64 data urls (the app allows 6 MB
+# per image) and the paper editor posts the whole latex source (1 MB).
+# Django's default body limit is 2.5 MB, and a request above it never
+# reaches the view: the answer was an opaque 400 page in the middle of
+# the canvas.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+
 # Email
 
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

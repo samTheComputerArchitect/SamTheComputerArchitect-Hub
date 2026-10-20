@@ -47,9 +47,10 @@
     <div class="notes-editor">
         <div class="tab-strip">
             {% for tab in tabs %}
-                <div class="tab{% if selected_tab and selected_tab.id == tab.id %} active{% endif %}" 
-                     data-tab-id="{{ tab.id }}" 
-                     data-href="?notebook={{ selected.id }}&amp;section={{ selected_section.id }}&amp;tab={{ tab.id }}" 
+                <div class="tab{% if selected_tab and selected_tab.id == tab.id %} active{% endif %}"
+                     data-tab-id="{{ tab.id }}"
+                     data-href="?notebook={{ selected.id }}&amp;section={{ selected_section.id }}&amp;tab={{ tab.id }}"
+                     role="link" tabindex="0"
                      style="cursor: pointer;">
                     <span class="tab-name">{{ tab.name }}</span>
                     <button type="button" class="tab-delete-btn" data-tab-id="{{ tab.id }}" aria-label="Delete tab">&times;</button>
@@ -153,8 +154,19 @@
     const SECTION_RENAME_URL = "{% url 'rename_section' %}";
     const SECTION_DELETE_URL = "{% url 'delete_section' %}";
     const TAB_ID = "{{ selected_tab.id }}";
-    let brushColor = localStorage.getItem('brushColor') || '#5294e2';
-    let brushWidth = parseFloat(localStorage.getItem('brushWidth')) || 2;
+    const DEFAULT_BRUSH_COLOR = '#5294e2';
+    // the same limit the server enforces on the note text
+    const MAX_NOTE_TEXT = 20000;
+    /* localStorage survives upgrades, so the stored colour may be
+       something the server refuses (a name, an empty string) */
+    function safeBrushColor(value) {
+        const text = (value || '').trim();
+        return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text) ? text : DEFAULT_BRUSH_COLOR;
+    }
+    let brushColor = safeBrushColor(localStorage.getItem('brushColor'));
+    /* a stale value from an older version must not break the drawings:
+       the slider only knows 1..24 and the server refuses more than 200 */
+    let brushWidth = Math.min(24, Math.max(1, parseFloat(localStorage.getItem('brushWidth')) || 2));
 
     const measurer = document.createElement('span');
     measurer.style.position = 'absolute';
@@ -292,7 +304,7 @@
             if (e.pointerId !== undefined && editorBody.hasPointerCapture(e.pointerId)) {
                 editorBody.releasePointerCapture(e.pointerId);
             }
-            if (TAB_ID) {
+            if (TAB_ID && (panX !== baseX || panY !== baseY)) {
                 const body = new URLSearchParams();
                 body.append('id', TAB_ID);
                 body.append('pan_x', panX);
@@ -305,6 +317,8 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     body: body.toString(),
+                }).catch(function (error) {
+                    console.error('Pan save failed', error);
                 });
             }
         }
@@ -367,8 +381,11 @@
                 editorBody.releasePointerCapture(e.pointerId);
             }
             const d = pointsToPath(drawPoints);
+            const pointCount = drawPoints.length;
             drawPoints = [];
-            if (!d || !TAB_ID || !drawPathEl) {
+            /* a click without a drag leaves a path with a single point:
+               there is no ink to save, so no empty drawing row either */
+            if (!d || !TAB_ID || !drawPathEl || pointCount < 2) {
                 if (drawPathEl) drawPathEl.remove();
                 drawPathEl = null;
                 return;
@@ -387,11 +404,20 @@
                 },
                 body: body.toString(),
             })
-                .then(function (response) { return response.json(); })
+                .then(function (response) {
+                    if (!response.ok) {
+                        console.error('Drawing save failed', response.status);
+                        return null;
+                    }
+                    return response.json();
+                })
                 .then(function (data) {
                     if (data && data.id && drawPathEl) {
                         drawPathEl.dataset.id = data.id;
                     }
+                })
+                .catch(function (error) {
+                    console.error('Drawing save failed', error);
                 });
         }
 
@@ -399,8 +425,17 @@
             const kind = el.dataset.kind || 'note';
             const textEl = el.querySelector('.note-text');
             const raw = textEl ? textEl.innerText : el.innerText;
-            const text = raw.replace(/\u00a0/g, ' ').trim();
+            let text = raw.replace(/ /g, ' ').trim();
             const id = el.dataset.id;
+
+            if (text.length > MAX_NOTE_TEXT) {
+                // the server refuses longer text: cut it here so the note
+                // is still saved instead of being rejected as a whole
+                text = text.slice(0, MAX_NOTE_TEXT);
+                if (textEl) textEl.textContent = text;
+                console.warn('Note text cut to ' + MAX_NOTE_TEXT + ' characters');
+            }
+
 
             if (kind === 'note') {
                 if (!text && !id) {
@@ -439,15 +474,24 @@
                 },
                 body: body.toString(),
             })
-                .then(function (response) { return response.json(); })
+                .then(function (response) {
+                    if (!response.ok) {
+                        console.error('Note save failed', response.status);
+                        return null;
+                    }
+                    return response.json();
+                })
                 .then(function (data) {
-                    if (!data.id) return;
+                    if (!data || !data.id) return;
                     el.dataset.id = data.id;
                     if (kind === 'note') {
                         el.classList.add('saved');
                         el.querySelector('.note-handle').hidden = false;
                         el.querySelector('.note-date').textContent = data.date;
                     }
+                })
+                .catch(function (error) {
+                    console.error('Note save failed', error);
                 });
         }
 
@@ -502,7 +546,19 @@
                 },
                 body: body.toString(),
             })
-                .then(function () { note.remove(); });
+                .then(function (response) {
+                    // The note may only leave the canvas when the server
+                    // really deleted it - otherwise it comes back on the
+                    // next reload with the delete "forgotten".
+                    if (!response.ok) {
+                        console.error('Note delete failed', response.status);
+                        return;
+                    }
+                    note.remove();
+                })
+                .catch(function (error) {
+                    console.error('Note delete failed', error);
+                });
         }
 
         let zCounter = 0;
@@ -549,9 +605,18 @@
                 },
                 body: body.toString(),
             })
-                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                    if (!r.ok) {
+                        console.error('Image save failed', r.status);
+                        return null;
+                    }
+                    return r.json();
+                })
                 .then(function (data) {
                     if (data && data.id) box.dataset.id = data.id;
+                })
+                .catch(function (error) {
+                    console.error('Image save failed', error);
                 });
         }
 
@@ -568,7 +633,16 @@
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: body.toString(),
-            }).then(function () { box.remove(); });
+            .then(function (response) {
+                if (!response.ok) {
+                    console.error('Image delete failed', response.status);
+                    return;
+                }
+                box.remove();
+            })
+            .catch(function (error) {
+                console.error('Image delete failed', error);
+            });
         }
 
         function createImage(dataUrl, x, y, width, height) {
@@ -761,6 +835,12 @@
         }
 
         document.addEventListener('paste', function (e) {
+            // pasting an image while writing a note should paste, not drop a
+            // canvas object next to the text
+            const active = document.activeElement;
+            if (active && (active.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(active.tagName) !== -1)) {
+                return;
+            }
             const items = e.clipboardData && e.clipboardData.items;
             if (!items) return;
             for (let i = 0; i < items.length; i++) {
@@ -1135,7 +1215,15 @@
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: body.toString(),
-            }).then(function () { el.remove(); });
+            }).then(function (response) {
+                if (!response.ok) {
+                    console.error('Drawing delete failed', response.status);
+                    return;
+                }
+                el.remove();
+            }).catch(function (error) {
+                console.error('Drawing delete failed', error);
+            });
         }
 
         function updateDrawingColor(el, color) {
@@ -1348,6 +1436,14 @@
                 }
             };
             document.addEventListener('keydown', escHandler);
+            // ... and when the modal leaves another way, otherwise every
+            // open of the dialog leaves a listener behind
+            const cleanup = () => document.removeEventListener('keydown', escHandler);
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    cleanup();
+                });
+            }
         });
     }
 
@@ -1417,6 +1513,15 @@
                                 'Content-Type': 'application/x-www-form-urlencoded',
                             },
                             body: body.toString(),
+                        }).then(function (response) {
+                            if (!response.ok) {
+                                // the name on screen would lie: put the old one back
+                                link.textContent = original;
+                                console.error('Section rename failed', response.status);
+                            }
+                        }).catch(function (error) {
+                            link.textContent = original;
+                            console.error('Section rename failed', error);
                         });
                     }
                 }
@@ -1461,21 +1566,34 @@
 
     document.querySelectorAll('.tab').forEach(function (tab) {
         let clickTimeout = null;
+        const openTab = function () {
+            const href = tab.dataset.href;
+            if (href) {
+                window.location.href = href;
+            }
+        };
         tab.addEventListener('click', function (e) {
             if (e.target.classList.contains('tab-delete-btn')) {
                 e.stopPropagation();
                 return;
             }
             if (e.target.tagName === 'INPUT') return;
-            
+
             if (clickTimeout) clearTimeout(clickTimeout);
-            
+
             clickTimeout = setTimeout(function () {
                 const href = tab.dataset.href;
                 if (href) {
                     window.location.href = href;
                 }
             }, 250);
+        });
+
+        /* the tab is a div, so the keyboard needs its own way in */
+        tab.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            openTab();
         });
 
         const deleteBtn = tab.querySelector('.tab-delete-btn');
@@ -1550,6 +1668,14 @@
                             'Content-Type': 'application/x-www-form-urlencoded',
                         },
                         body: body.toString(),
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            nameSpan.textContent = original;
+                            console.error('Tab rename failed', response.status);
+                        }
+                    }).catch(function (error) {
+                        nameSpan.textContent = original;
+                        console.error('Tab rename failed', error);
                     });
                 }
             }

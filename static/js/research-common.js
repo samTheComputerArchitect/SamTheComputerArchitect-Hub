@@ -104,6 +104,8 @@
                     try {
                         const result = await postResearch(RESEARCH_UPDATE_URL, { id: id, status: value });
                         if (result.ok) {
+                            // the colour follows the data-status attribute
+                            // through the css, so the badge repaints itself
                             badge.dataset.status = value;
                             badge.querySelector('.status-label').textContent = STATUS_META[value].label;
                         } else {

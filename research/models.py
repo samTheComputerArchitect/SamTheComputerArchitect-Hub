@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils.text import slugify
 
 
@@ -103,3 +105,30 @@ class ExperimentFile(models.Model):
         if not self.original_name and self.file:
             self.original_name = self.file.name.rsplit('/', 1)[-1]
         super().save(*args, **kwargs)
+
+
+class ResearchPaper(models.Model):
+    """The LaTeX source of a project's research paper."""
+
+    project = models.OneToOneField(
+        ResearchProject,
+        on_delete=models.CASCADE,
+        related_name='paper',
+    )
+    source = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.project.acronym} paper'
+
+
+@receiver(post_delete, sender=ExperimentFile)
+def delete_experiment_file_media(sender, instance, **kwargs):
+    """Deleting the row must not leave the blob orphaned in media/.
+
+    Django cascades foreign keys when an Experiment or a whole ResearchProject
+    is deleted, but the uploaded files would stay on disk forever.
+    """
+    storage = instance.file.storage
+    if instance.file and storage.exists(instance.file.name):
+        storage.delete(instance.file.name)

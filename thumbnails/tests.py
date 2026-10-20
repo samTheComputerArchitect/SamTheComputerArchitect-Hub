@@ -347,3 +347,275 @@ class ElementFileTests(TempMediaRootMixin, TestCase):
         path = element.image.path
         element.delete()
         self.assertFalse(os.path.exists(path))
+
+
+class PkGuardTests(TempMediaRootMixin, TestCase):
+    """Non-numeric ids must answer 404/400 JSON, not raise ValueError (500).
+
+    Audit regression tests: every POST endpoint used to look the row up
+    with the raw form string, which crashes with
+    "ValueError: Field 'id' expected a number" for any junk value.
+    """
+
+    def setUp(self):
+        self.thumb = Thumbnail.objects.create(name='Guarded')
+
+    def post(self, url_name, data):
+        return self.client.post(reverse(url_name), data)
+
+    def test_rename_rejects_garbage_id(self):
+        response = self.post('rename_thumbnail', {'id': 'zzz', 'name': 'X'})
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Thumbnail.objects.filter(pk=self.thumb.pk).exists())
+
+    def test_background_rejects_garbage_id(self):
+        response = self.post('background_update', {'id': 'zzz', 'background_color': '#101010'})
+        self.assertEqual(response.status_code, 404)
+        self.thumb.refresh_from_db()
+        self.assertEqual(self.thumb.background_color, '#ffffff')
+
+    def test_background_accepts_thumbnail_field_for_backward_compat(self):
+        response = self.post('background_update', {
+            'thumbnail': self.thumb.pk, 'background_color': '#101010',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.thumb.refresh_from_db()
+        self.assertEqual(self.thumb.background_color, '#101010')
+
+    def test_delete_rejects_garbage_id(self):
+        response = self.post('delete_thumbnail', {'id': 'zzz'})
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Thumbnail.objects.filter(pk=self.thumb.pk).exists())
+
+    def test_duplicate_rejects_garbage_id(self):
+        response = self.post('duplicate_thumbnail', {'id': 'zzz'})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(Thumbnail.objects.count(), 1)
+
+    def test_element_create_rejects_garbage_thumbnail(self):
+        response = self.post('element_create', {'thumbnail': 'zzz', 'kind': 'text', 'text': 'o'})
+        self.assertEqual(response.status_code, 404)
+
+    def test_element_update_rejects_garbage_id(self):
+        response = self.post('element_update', {'id': 'zzz', 'width': 40})
+        self.assertEqual(response.status_code, 404)
+
+    def test_element_update_rejects_garbage_thumbnail_filter(self):
+        upload = SimpleUploadedFile('g.png', png_bytes(), content_type='image/png')
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_IMAGE, image=upload
+        )
+        response = self.post('element_update', {'id': element.pk, 'thumbnail': 'zzz', 'width': 40})
+        self.assertEqual(response.status_code, 404)
+        response = self.post('element_delete', {'id': element.pk, 'thumbnail': 'zzz'})
+        self.assertEqual(response.status_code, 404)
+        element.refresh_from_db()
+        self.assertEqual(element.width, 200)
+
+    def test_element_update_accepts_valid_thumbnail_filter(self):
+        upload = SimpleUploadedFile('g.png', png_bytes(), content_type='image/png')
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_IMAGE, image=upload
+        )
+        response = self.post('element_update', {
+            'id': element.pk, 'thumbnail': self.thumb.pk, 'width': 55,
+        })
+        self.assertEqual(response.status_code, 200)
+        element.refresh_from_db()
+        self.assertEqual(element.width, 55)
+
+    def test_element_delete_rejects_garbage_id(self):
+        response = self.post('element_delete', {'id': 'zzz'})
+        self.assertEqual(response.status_code, 404)
+
+    def test_endpoints_still_work_with_numeric_ids(self):
+        response = self.post('rename_thumbnail', {'id': self.thumb.pk, 'name': 'Renamed'})
+        self.assertEqual(response.status_code, 200)
+        response = self.post('delete_thumbnail', {'id': self.thumb.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Thumbnail.objects.count(), 0)
+
+    def test_rename_rejects_empty_name(self):
+        response = self.post('rename_thumbnail', {'id': self.thumb.pk, 'name': '   '})
+        self.assertEqual(response.status_code, 400)
+        self.thumb.refresh_from_db()
+        self.assertEqual(self.thumb.name, 'Guarded')
+
+
+class GalleryPreviewTests(TempMediaRootMixin, TestCase):
+    """The gallery used to run one elements query per card (N+1) just to
+    pick a preview image; the view now fetches the topmost image for all
+    thumbnails in a single query and keeps the same pick order."""
+
+    def setUp(self):
+        self.thumb = Thumbnail.objects.create(name='Gallery')
+
+    def test_query_count_is_bounded(self):
+        for i in range(4):
+            Thumbnail.objects.create(name=f'T{i}')
+        with self.assertNumQueries(2):
+            self.assertEqual(self.client.get(reverse('thumbnails')).status_code, 200)
+
+    def test_topmost_image_is_picked_as_preview(self):
+        upload = SimpleUploadedFile('a.png', png_bytes(), content_type='image/png')
+        image = ThumbnailElement.objects.create(
+            thumbnail=self.thumb,
+            kind=ThumbnailElement.KIND_IMAGE,
+            image=upload,
+            z_index=7,
+        )
+        response = self.client.get(reverse('thumbnails'))
+        self.assertContains(response, image.image.url)
+
+    def test_text_only_thumbnail_shows_no_preview(self):
+        ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_TEXT, text='hi'
+        )
+        response = self.client.get(reverse('thumbnails'))
+        self.assertContains(response, 'Empty thumbnail')
+
+
+class NumericGuardTests(TempMediaRootMixin, TestCase):
+    """Round two: the number parsers must survive hostile values.
+
+    `int(float('inf'))` raises OverflowError, and `float('nan')` poisons
+    every comparison that follows it - both reached the database through
+    the element endpoints and turned into HTTP 500s or NaN geometry.
+    """
+
+    def setUp(self):
+        self.thumb = Thumbnail.objects.create(name='Numbers')
+
+    def create_element(self, **data):
+        payload = {'thumbnail': self.thumb.pk, 'kind': 'text', 'text': 'hello'}
+        payload.update(data)
+        return self.client.post(reverse('element_create'), payload)
+
+    def test_an_infinite_brightness_does_not_crash_the_create(self):
+        response = self.create_element(brightness='inf')
+        self.assertEqual(response.status_code, 200)
+        element = ThumbnailElement.objects.get(pk=response.json()['id'])
+        self.assertTrue(-1e9 < element.brightness < 1e9)
+
+    def test_an_infinite_brightness_does_not_crash_the_update(self):
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_TEXT, text='x',
+        )
+        response = self.client.post(
+            reverse('element_update'),
+            {'id': element.pk, 'brightness': '1e400'},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_nan_geometry_is_never_stored(self):
+        response = self.create_element(width='nan', height='nan', x='nan', y='nan')
+        self.assertEqual(response.status_code, 200)
+        element = ThumbnailElement.objects.get(pk=response.json()['id'])
+        for value in (element.width, element.height, element.x, element.y):
+            self.assertEqual(value, value)  # not NaN
+            self.assertNotEqual(str(value), 'nan')
+
+    def test_infinite_geometry_is_never_stored(self):
+        response = self.create_element(width='inf', opacity='inf', rotation='-inf')
+        self.assertEqual(response.status_code, 200)
+        element = ThumbnailElement.objects.get(pk=response.json()['id'])
+        self.assertLessEqual(element.width, 20000)
+        self.assertGreaterEqual(element.opacity, 0)
+        self.assertLessEqual(element.opacity, 1)
+
+    def test_nan_geometry_is_rejected_on_update(self):
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_TEXT, text='x',
+        )
+        response = self.client.post(
+            reverse('element_update'), {'id': element.pk, 'width': 'nan'},
+        )
+        self.assertEqual(response.status_code, 200)
+        element.refresh_from_db()
+        self.assertNotEqual(str(element.width), 'nan')
+
+    def test_an_oversized_element_text_is_rejected(self):
+        response = self.create_element(text='x' * 2001)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('too long', response.json()['error'])
+
+    def test_an_oversized_element_text_is_rejected_on_update(self):
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_TEXT, text='x',
+        )
+        response = self.client.post(
+            reverse('element_update'), {'id': element.pk, 'text': 'y' * 5000},
+        )
+        self.assertEqual(response.status_code, 400)
+        element.refresh_from_db()
+        self.assertEqual(element.text, 'x')
+
+    def test_the_font_size_is_clamped_on_create(self):
+        response = self.create_element(font_size='100000')
+        self.assertEqual(response.status_code, 200)
+        element = ThumbnailElement.objects.get(pk=response.json()['id'])
+        self.assertLessEqual(element.font_size, 400)
+
+    def test_a_huge_width_is_clamped_on_create(self):
+        response = self.create_element(width='999999999')
+        self.assertEqual(response.status_code, 200)
+        element = ThumbnailElement.objects.get(pk=response.json()['id'])
+        self.assertLessEqual(element.width, 20000)
+
+    def test_a_huge_width_is_clamped_on_update(self):
+        element = ThumbnailElement.objects.create(
+            thumbnail=self.thumb, kind=ThumbnailElement.KIND_TEXT, text='x',
+        )
+        response = self.client.post(
+            reverse('element_update'), {'id': element.pk, 'width': '999999999'},
+        )
+        self.assertEqual(response.status_code, 200)
+        element.refresh_from_db()
+        self.assertLessEqual(element.width, 20000)
+
+
+class EditorClientGuardTests(TempMediaRootMixin, TestCase):
+    """Round two: the editor may not show a name the server refused."""
+
+    def setUp(self):
+        self.thumb = Thumbnail.objects.create(name='Client')
+
+    def test_a_refused_rename_puts_the_old_name_back(self):
+        response = self.client.get(
+            reverse('thumbnail_editor', args=[self.thumb.pk]),
+        )
+        html = response.content.decode()
+        self.assertIn('post(RENAME_URL', html)
+        self.assertIn('nameEl.textContent = original', html)
+
+
+class EditorClientGuardTests2(TempMediaRootMixin, TestCase):
+    """Round two: the editor client must survive a non-json answer."""
+
+    def setUp(self):
+        self.thumb = Thumbnail.objects.create(name='Guard2')
+
+    def editor_html(self):
+        response = self.client.get(reverse('thumbnail_editor', args=[self.thumb.pk]))
+        return response.content.decode()
+
+    def test_the_post_helpers_parse_the_body_defensively(self):
+        html = self.editor_html()
+        self.assertIn('JSON.parse(text)', html)
+        self.assertNotIn('return response.json().then(function (data) {', html)
+
+    def test_the_number_fields_are_clamped_to_their_range(self):
+        html = self.editor_html()
+        self.assertIn('const clamp = function (value) {', html)
+        self.assertIn('MAX_ELEMENT_SIZE = 20000', html)
+        self.assertIn('MAX_ELEMENT_TEXT = 2000', html)
+
+    def test_bring_to_front_takes_a_free_slot(self):
+        html = self.editor_html()
+        self.assertIn('const target = nextZ();', html)
+
+    def test_the_gallery_cards_can_be_opened_with_the_keyboard(self):
+        response = self.client.get(reverse('thumbnails'))
+        html = response.content.decode()
+        self.assertIn('tabindex="0"', html)
+        self.assertIn("e.key !== 'Enter' && e.key !== ' '", html)

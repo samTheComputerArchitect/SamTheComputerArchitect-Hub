@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+
+{% load static %}
+
+{% block page_name %}{{ file_name }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'js/vendor/codemirror/codemirror.css' %}">
+<style>
+    main {
+        padding: 0;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 52px;
+        padding: 0 24px;
+        background: rgba(9, 10, 10, 0.86);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border-light);
+    }
+    .topbar-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+    }
+    .topbar-crumb:hover {
+        color: var(--color-primary);
+    }
+    .topbar-crumb .sep {
+        color: var(--text-nav);
+    }
+    .topbar-crumb .here {
+        color: var(--text-secondary);
+    }
+    .topbar-crumb svg {
+        flex: 0 0 auto;
+        opacity: 0.7;
+    }
+    .topbar-spacer {
+        flex: 1;
+    }
+    .topbar-meta {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 34px;
+        padding: 0 16px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+    .btn-primary:hover {
+        opacity: 0.88;
+    }
+    .btn-quiet {
+        display: inline-flex;
+        align-items: center;
+        height: 34px;
+        padding: 0 14px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .btn-quiet:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .file-shell {
+        padding: 20px 24px 32px;
+    }
+    .file-notice {
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 20px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+    }
+    .file-notice strong {
+        color: var(--text-primary);
+    }
+    .file-notice .file-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+    }
+    .file-cut {
+        margin: 0 0 10px;
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    /* ------------------------------------------------------- editor -- */
+    .file-editor {
+        height: calc(100vh - 52px - 20px - 32px);
+        min-height: 320px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .CodeMirror {
+        height: 100%;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+    }
+    .CodeMirror-gutters {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+    }
+    .CodeMirror-linenumber {
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 0 10px 0 8px;
+    }
+    .CodeMirror-cursor {
+        border-left: 2px solid var(--color-primary);
+    }
+    .CodeMirror-selected {
+        background: rgba(82, 148, 226, 0.2);
+    }
+    /* the syntax palette: light tints of the app's own accents, the same
+       one the paper editor uses */
+    .file-editor span.cm-tag,
+    .file-editor span.cm-keyword {
+        color: #7ab3ec;
+    }
+    .file-editor span.cm-builtin,
+    .file-editor span.cm-def {
+        color: #a3cdf3;
+    }
+    .file-editor span.cm-atom,
+    .file-editor span.cm-number {
+        color: #f0c96e;
+    }
+    .file-editor span.cm-variable-2 {
+        color: #8ed3e8;
+    }
+    .file-editor span.cm-string,
+    .file-editor span.cm-string-2 {
+        color: #7fd8a8;
+    }
+    .file-editor span.cm-comment {
+        color: #9aa6b8;
+    }
+    .file-editor span.cm-error {
+        color: var(--color-danger-light);
+    }
+    .file-editor span.cm-operator,
+    .file-editor span.cm-punctuation {
+        color: #b6c2d4;
+    }
+    .file-editor span.cm-variable,
+    .file-editor span.cm-variable-3 {
+        color: var(--text-primary);
+    }
+</style>
+
+<div class="topbar" role="toolbar" aria-label="File toolbar">
+    <a class="topbar-crumb" href="{% url 'research_experiment_view' project.pk experiment.pk %}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+        {{ project.acronym }}
+        <span class="sep">/</span>
+        <span class="here">{{ experiment.title }}</span>
+        <span class="sep">/</span>
+        <span class="here">{{ file_name }}</span>
+    </a>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-meta">{{ file_size|filesizeformat }}{% if file_mode != 'null' %} &middot; {{ file_mode }}{% endif %}</span>
+    <div class="topbar-actions">
+        <a class="btn-quiet" href="{% url 'research_experiment_view' project.pk experiment.pk %}">Back</a>
+        <a class="btn-primary" href="{{ experiment_file.file.url }}" download>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download
+        </a>
+    </div>
+</div>
+
+<div class="file-shell">
+    {% if file_text is None %}
+        <div class="file-notice">
+            <strong>{{ file_name }}</strong> is not a text file - its bytes are not valid utf-8,
+            so there is nothing to show in an editor. Download it and open it with the
+            program it belongs to.
+            <div class="file-actions">
+                <a class="btn-primary" href="{{ experiment_file.file.url }}" download>Download</a>
+            </div>
+        </div>
+    {% else %}
+        {% if file_truncated %}
+            <p class="file-cut">The file is larger than 512 KB - the first 512 KB are shown.</p>
+        {% endif %}
+        {{ file_text|json_script:"file-source-data" }}
+        <div class="file-editor" id="file-editor"></div>
+    {% endif %}
+</div>
+
+<script src="{% static 'js/vendor/codemirror/codemirror.js' %}"></script>
+{% for script in mode_scripts %}<script src="{% static 'js/vendor/codemirror/'|add:script %}"></script>
+{% endfor %}
+<script>
+    (function () {
+        'use strict';
+        {% if file_text is not None %}
+        const SOURCE = JSON.parse(document.getElementById('file-source-data').textContent);
+        const MODE = "{{ file_mode|escapejs }}";
+
+        const editor = CodeMirror(document.getElementById('file-editor'), {
+            value: SOURCE,
+            mode: MODE,
+            lineNumbers: true,
+            lineWrapping: true,
+            readOnly: true,
+            indentUnit: 4,
+            tabSize: 4,
+        });
+        editor.refresh();
+        {% endif %}
+    })();
+</script>
+{% endblock %}

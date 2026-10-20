@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+
+{% block page_name %}{{ experiment.title }}{% endblock %}
+
+{% block content %}
+<style>
+    main {
+        padding: 0;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .sheet {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 24px 80px;
+    }
+    /* the context you write against on the left, the one field you write on
+       the right */
+    .write-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 320px) minmax(0, 640px);
+        gap: 40px;
+        align-items: start;
+    }
+    .col-recall {
+        min-width: 0;
+        position: sticky;
+        top: 16px;
+    }
+    .col-write {
+        min-width: 0;
+    }
+    .write-layout.no-recall {
+        grid-template-columns: minmax(0, 640px);
+        justify-content: center;
+    }
+    .write-layout.no-recall .col-recall {
+        display: none;
+    }
+    @media (max-width: 1060px) {
+        .write-layout,
+        .write-layout.no-recall {
+            grid-template-columns: minmax(0, 640px);
+            justify-content: center;
+        }
+        /* the field comes first, the context follows it */
+        .col-write {
+            order: 1;
+        }
+        .col-recall {
+            order: 2;
+            position: static;
+        }
+    }
+    @media (max-height: 699px) {
+        .col-recall {
+            position: static;
+        }
+    }
+    .sheet-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        margin-bottom: 28px;
+        transition: color 0.15s;
+    }
+    .sheet-crumb:hover {
+        color: var(--color-primary);
+    }
+    .sheet-crumb svg {
+        opacity: 0.7;
+    }
+    .sheet-title {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.25;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+        overflow-wrap: break-word;
+    }
+    .sheet-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 32px;
+    }
+    .recall {
+        border-left: 2px solid var(--border-light);
+        padding: 2px 0 2px 18px;
+        margin-bottom: 30px;
+    }
+    .recall-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 7px;
+    }
+    .recall-text {
+        font-size: 13px;
+        line-height: 1.75;
+        color: var(--text-secondary);
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+    }
+    .prompt {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--color-primary);
+        margin-bottom: 8px;
+    }
+    .prompt-help {
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.7;
+        margin-bottom: 14px;
+    }
+    .conclusion-input {
+        width: 100%;
+        min-height: 120px;
+        padding: 16px 18px;
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--text-primary);
+        background: #131820;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        resize: vertical;
+        overflow: hidden;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .conclusion-input:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px var(--color-primary-soft);
+    }
+    .conclusion-input::placeholder {
+        color: #565d68;
+    }
+    .sheet-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 22px;
+    }
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        padding: 0 20px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: opacity 0.15s, background 0.15s;
+    }
+    .btn-primary:hover {
+        opacity: 0.9;
+    }
+    .btn-quiet {
+        display: inline-flex;
+        align-items: center;
+        height: 38px;
+        padding: 0 14px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .btn-quiet:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .done-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .done-note .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #52c48a;
+    }
+    .done-note .dot.empty {
+        background: #e2a852;
+    }
+    .field-errors {
+        margin-bottom: 12px;
+        color: var(--color-danger-light);
+        font-size: 12px;
+    }
+    .field-errors ul {
+        margin: 0;
+        padding-left: 18px;
+    }
+</style>
+
+<div class="sheet">
+    <a class="sheet-crumb" href="{% url 'research_project' project.pk %}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+        {{ project.acronym }}
+    </a>
+
+    <h1 class="sheet-title">{{ experiment.title }}</h1>
+    <p class="sheet-sub">
+        Started {{ experiment.created_at|date:"M j, Y" }}
+        {% if experiment.updated_at != experiment.created_at %} &middot; last touched {{ experiment.updated_at|date:"M j, Y" }}{% endif %}
+    </p>
+
+    <div class="write-layout{% if not experiment.description and not experiment.hypothesis %} no-recall{% endif %}">
+        <div class="col-recall">
+            {% if experiment.description %}
+                <div class="recall">
+                    <div class="recall-label">What I did</div>
+                    <div class="recall-text">{{ experiment.description }}</div>
+                </div>
+            {% endif %}
+
+            {% if experiment.hypothesis %}
+                <div class="recall">
+                    <div class="recall-label">What I expected</div>
+                    <div class="recall-text">{{ experiment.hypothesis }}</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="col-write">
+            <form method="post" id="conclusion-form">
+                {% csrf_token %}
+                <div class="prompt">What happened</div>
+                {% if conclusion_error %}
+                    <div class="field-errors"><ul><li>{{ conclusion_error }}</li></ul></div>
+                {% endif %}
+                <div class="prompt-help">
+                    {% if experiment.conclusion %}
+                        Rewrite the conclusion whenever the result changes.
+                    {% else %}
+                        The experiment has run. Write down what actually happened, and what you concluded from it.
+                    {% endif %}
+                </div>
+                <textarea class="conclusion-input" name="conclusion" id="id_conclusion" autofocus
+                    placeholder="It turned out that…">{% if conclusion_draft %}{{ conclusion_draft }}{% elif experiment.conclusion %}{{ experiment.conclusion }}{% endif %}</textarea>
+
+                <div class="sheet-actions">
+                    <button type="submit" class="btn-primary">
+                        {% if experiment.conclusion %}Save conclusion{% else %}Add conclusion{% endif %}
+                    </button>
+                    <a class="btn-quiet" href="{% url 'research_experiment_view' project.pk experiment.pk %}">All details</a>
+                    <a class="btn-quiet" href="{% url 'research_experiment_edit' project.pk experiment.pk %}">Edit all details</a>
+                    <span class="done-note">
+                        <span class="dot{% if not experiment.conclusion %} empty{% endif %}"></span>
+                        {% if experiment.conclusion %}Conclusion added{% else %}No conclusion yet{% endif %}
+                    </span>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const el = document.getElementById('id_conclusion');
+        if (!el) return;
+        function autoGrow() {
+            el.style.height = 'auto';
+            el.style.height = Math.max(el.scrollHeight, 120) + 'px';
+        }
+        autoGrow();
+        el.addEventListener('input', autoGrow);
+    })();
+</script>
+{% endblock %}

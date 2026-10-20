@@ -5,236 +5,251 @@
 {% block content %}
 <style>
     main {
-        padding: 20px 20px 16px;
+        padding: 0;
     }
     .page-header {
         display: none !important;
     }
-    .form-bar {
+
+    /* a slim, always reachable bar - the primary action is never hunted for */
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 52px;
+        padding: 0 24px;
+        background: rgba(9, 10, 10, 0.86);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border-light);
+    }
+    .topbar-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+    }
+    .topbar-crumb:hover {
+        color: var(--color-primary);
+    }
+    .topbar-crumb .sep {
+        color: var(--text-nav);
+    }
+    .topbar-crumb .here {
+        color: var(--text-secondary);
+    }
+    .topbar-spacer {
+        flex: 1;
+    }
+    .topbar-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    /* one centred column - a straight line down the page */
+    .sheet {
+        max-width: 1052px;
+        margin: 0 auto;
+        padding: 44px 24px 96px;
+    }
+
+    /* the writing fields on the left, everything else in a rail on the right */
+    .form-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 720px) 300px;
+        gap: 32px;
+        align-items: start;
+    }
+    .col-main {
+        min-width: 0;
+    }
+    .col-rail {
+        min-width: 0;
+        position: sticky;
+        top: 68px;
+        display: flex;
+        flex-direction: column;
+    }
+    .col-rail > .preview {
+        margin-top: 0;
+    }
+    .col-rail > .field {
+        margin-top: 20px;
+    }
+    .rail-actions {
+        margin-top: 22px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .rail-actions .save-hint {
+        margin-left: 0;
+    }
+    @media (max-width: 1060px) {
+        .form-layout {
+            grid-template-columns: minmax(0, 720px);
+            justify-content: center;
+        }
+        .col-rail {
+            position: static;
+        }
+        /* under the fields the rail reads: files, preview, cancel */
+        .col-rail > .field { order: 1; }
+        .col-rail > .preview { order: 2; margin-top: 20px; }
+        .rail-actions { order: 3; }
+    }
+    .sheet-eyebrow {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 14px;
+    }
+
+    /* the title is the first field, and it is big
+       (the id keeps it above the global `input[type=text]` rule) */
+    input[type="text"].title-input {
+        width: 100%;
+        padding: 0 0 10px;
+        font-family: var(--font-sans);
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: -0.4px;
+        color: var(--text-primary);
+        background: none;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        transition: border-color 0.15s;
+    }
+    input[type="text"].title-input:focus {
+        outline: none;
+        border-bottom-color: var(--color-primary);
+    }
+    input[type="text"].title-input::placeholder {
+        color: #4d545e;
+    }
+
+    /* a live preview of the card you are building */
+    .preview {
+        margin-top: 26px;
+        padding: 14px 16px;
+        background: #14181f;
+        border: 1px solid var(--border);
+        border-radius: 6px;
         display: flex;
         align-items: center;
         gap: 12px;
-        height: 46px;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-light);
-        border-radius: 4px;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 0 8px 0 6px;
-        margin-bottom: 14px;
-        overflow: hidden;
     }
-    .back-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        height: 32px;
-        padding: 0 10px 0 8px;
-        flex: 0 0 auto;
-        color: var(--text-secondary);
-        border: 1px solid transparent;
-        background: none;
-        font-family: var(--font-sans);
-        font-size: 13px;
-        text-decoration: none;
-        cursor: pointer;
-        transition: color 0.15s, border-color 0.15s;
-    }
-    .back-link:hover {
-        color: var(--color-primary);
-        border-color: var(--border);
-    }
-    .back-name {
+    .preview-label {
+        font-size: 9px;
         font-weight: 600;
-        color: var(--text-primary);
-    }
-    .back-link:hover .back-name {
-        color: var(--color-primary);
-    }
-    .form-sep {
-        color: var(--text-nav);
-        font-size: 13px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-muted);
         flex: 0 0 auto;
     }
-    .form-title {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        font-size: 13px;
-        color: var(--text-primary);
+    .preview-title {
+        font-size: 14px;
         font-weight: 600;
-        white-space: nowrap;
+        color: var(--text-primary);
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-    .form-spacer {
-        flex: 1;
-    }
-    .tool-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        height: 32px;
-        padding: 0 14px;
-        background: var(--bg-primary);
-        border: 1px solid var(--border);
-        color: var(--text-secondary);
-        font-family: var(--font-sans);
-        font-size: 12px;
-        text-decoration: none;
-        cursor: pointer;
-        transition: color 0.15s, border-color 0.15s, background 0.15s;
         white-space: nowrap;
     }
-    .tool-btn:hover {
-        border-color: var(--color-primary);
-        color: var(--color-primary);
+    .preview-title.empty {
+        color: #4d545e;
+        font-weight: 400;
+        font-style: italic;
     }
-    .tool-btn-primary {
-        background: var(--color-primary);
-        border-color: var(--color-primary);
-        color: var(--bg-primary);
+    .preview-status {
+        margin-left: auto;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 8px;
+        font-size: 10px;
         font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        color: #52c48a;
+        background: rgba(82, 196, 138, 0.12);
+        border: 1px solid rgba(82, 196, 138, 0.45);
     }
-    .tool-btn-primary:hover {
-        color: var(--bg-primary);
-        opacity: 0.88;
+    .preview-status .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
     }
 
-    .form-layout {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 16px;
-        /* both panels stretch to the same height */
-        align-items: stretch;
-    }
-    @media (max-width: 980px) {
-        .form-layout {
-            grid-template-columns: minmax(0, 1fr);
-        }
-    }
-    .panel {
-        background: #1a1a1a;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-    }
-    .panel.full {
-        grid-column: 1 / -1;
-    }
-    .panel-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 16px;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        border-bottom: 1px solid var(--border);
-        flex: 0 0 auto;
-    }
-    .panel-hint {
-        margin-left: auto;
-        font-size: 10px;
-        font-weight: 400;
-        letter-spacing: 0;
-        text-transform: none;
-        color: var(--text-muted);
-    }
-    .panel-body {
-        padding: 16px;
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-    }
-    /* only the direct children of the panel body are spaced apart */
-    .panel-body > .field + .field {
-        margin-top: 16px;
-    }
-    /* the last text area of a panel fills the leftover height, so both
-       panels end up looking the same */
-    .panel-body > .field-grow {
-        flex: 1 1 auto;
-        min-height: 0;
-    }
-    .panel-body > .field-grow textarea {
-        flex: 1 1 auto;
-        min-height: 120px;
-    }
+    /* the fields */
     .field {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
+        margin-top: 34px;
     }
     .field-label {
         display: block;
         font-size: 10px;
         font-weight: 600;
-        color: var(--text-muted);
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        letter-spacing: 0.14em;
-        margin-bottom: 7px;
-        flex: 0 0 auto;
+        color: var(--color-primary);
+        margin-bottom: 6px;
+    }
+    .field-help {
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+    }
+    .field-help .optional {
+        color: #4d545e;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        margin-left: 6px;
     }
     .field input[type="text"],
-    .field textarea,
-    .field input[type="file"] {
+    .field textarea {
         width: 100%;
         box-sizing: border-box;
-        background: var(--bg-primary);
-        border: 1px solid var(--border);
-        color: var(--text-primary);
+        padding: 13px 15px;
         font-family: var(--font-sans);
-        font-size: 13px;
-        padding: 9px 11px;
-        border-radius: 3px;
+        font-size: 14px;
+        line-height: 1.75;
+        color: var(--text-primary);
+        background: #131820;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        transition: border-color 0.15s, box-shadow 0.15s;
     }
     .field textarea {
         resize: vertical;
-        line-height: 1.7;
-        min-height: 90px;
+        min-height: 96px;
+        overflow: hidden;
     }
     .field input[type="text"]:focus,
-    .field textarea:focus,
-    .field input[type="file"]:focus {
+    .field textarea:focus {
         outline: none;
         border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px var(--color-primary-soft);
     }
-    .field input[type="file"] {
-        font-size: 12px;
-        color: var(--text-secondary);
-        padding: 8px 10px;
-    }
-    .field input[type="file"]::file-selector-button {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        color: var(--text-secondary);
-        font-family: var(--font-sans);
-        font-size: 11px;
-        padding: 5px 10px;
-        margin-right: 10px;
-        cursor: pointer;
-    }
-    .field input[type="file"]::file-selector-button:hover {
-        border-color: var(--color-primary);
-        color: var(--color-primary);
-    }
-    .field-help {
-        margin-top: 6px;
-        font-size: 11px;
-        color: var(--text-muted);
-        line-height: 1.6;
+    .field input[type="text"]::placeholder,
+    .field textarea::placeholder {
+        color: #4d545e;
     }
     .field-errors {
-        margin-top: 6px;
-        font-size: 11px;
+        margin-top: 8px;
+        font-size: 12px;
         color: var(--color-danger-light);
         line-height: 1.6;
     }
@@ -242,20 +257,22 @@
         margin: 0;
         padding-left: 16px;
     }
+
+    /* files */
     .existing-files {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
         margin-bottom: 14px;
     }
     .existing-file {
         display: flex;
         align-items: center;
-        gap: 9px;
-        padding: 7px 10px;
-        background: var(--bg-primary);
+        gap: 10px;
+        padding: 9px 12px;
+        background: #131820;
         border: 1px solid var(--border);
-        border-radius: 3px;
+        border-radius: 5px;
         font-size: 12px;
         color: var(--text-secondary);
     }
@@ -279,139 +296,239 @@
         color: var(--text-muted);
         cursor: pointer;
     }
+    .field input[type="file"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 11px 13px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        background: #131820;
+        border: 1px dashed var(--border);
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .field input[type="file"]::file-selector-button {
+        background: #1c212a;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        padding: 6px 11px;
+        margin-right: 11px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .field input[type="file"]::file-selector-button:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
     .selected-files {
-        margin-top: 8px;
+        margin-top: 10px;
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 7px;
     }
     .selected-file {
         display: inline-flex;
         align-items: center;
-        height: 22px;
-        padding: 0 9px;
-        background: var(--bg-primary);
+        height: 23px;
+        padding: 0 10px;
+        background: #131820;
         border: 1px solid var(--border);
-        border-radius: 3px;
+        border-radius: 4px;
         font-size: 11px;
         color: var(--text-secondary);
     }
+
+    /* the one primary action lives in the top bar */
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 40px;
+        padding: 0 22px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: opacity 0.15s;
+    }
+    .btn-primary:hover {
+        opacity: 0.9;
+    }
+    .btn-quiet {
+        display: inline-flex;
+        align-items: center;
+        height: 40px;
+        padding: 0 16px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .btn-quiet:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .save-hint {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--text-muted);
+    }
 </style>
+
+<div class="topbar">
+    <a class="topbar-crumb" href="{% url 'research_project' project.pk %}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+        <span class="crumb-name">{{ project.acronym }}</span>
+        <span class="sep">&rsaquo;</span>
+        <span class="here">{% if is_edit %}Edit experiment{% else %}New experiment{% endif %}</span>
+    </a>
+    <div class="topbar-spacer"></div>
+    <span class="topbar-hint">{% if is_edit %}Changes are saved when you save{% else %}Nothing is saved until you create it{% endif %}</span>
+    <button type="submit" form="experiment-form" class="btn-primary">
+        {% if is_edit %}Save changes{% else %}Create experiment{% endif %}
+    </button>
+</div>
 
 <form method="post" enctype="multipart/form-data" id="experiment-form">
     {% csrf_token %}
 
-    <div class="form-bar">
-        <a class="back-link" href="{% url 'research_project' project.pk %}" title="Back to {{ project.acronym }}" aria-label="Back to {{ project.acronym }}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-            <span class="back-name">{{ project.acronym }}</span>
-        </a>
-        <span class="form-sep">&rsaquo;</span>
-        <div class="form-title">{% if is_edit %}Edit experiment{% else %}New experiment{% endif %}</div>
-        <div class="form-spacer"></div>
-        <a class="tool-btn" href="{% url 'research_project' project.pk %}">Cancel</a>
-        <button type="submit" class="tool-btn tool-btn-primary">
-            {% if is_edit %}Save changes{% else %}Create experiment{% endif %}
-        </button>
-    </div>
+    <div class="sheet">
+        <div class="form-layout">
+            <div class="col-main">
+                <div class="sheet-eyebrow">{% if is_edit %}Editing an experiment{% else %}A new experiment{% endif %}</div>
 
-    {% if form.non_field_errors %}
-        <div class="field-errors" style="margin-bottom: 14px;">
-            <ul>
-                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-            </ul>
-        </div>
-    {% endif %}
+                <input type="text" class="title-input" id="id_title" name="title" maxlength="200"
+                    value="{{ form.title.value|default:'' }}"
+                    placeholder="Name this experiment" autocomplete="off" required>
+                {% if form.title.errors %}
+                    <div class="field-errors"><ul>{% for error in form.title.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+                {% endif %}
 
-    <div class="form-layout">
-        <section class="panel">
-            <div class="panel-title">Experiment</div>
-            <div class="panel-body">
                 <div class="field">
-                    <label class="field-label" for="id_title">Title</label>
-                    <input type="text" id="id_title" name="title" value="{{ form.title.value|default:'' }}" maxlength="200" placeholder="What did you try?" required>
-                    {% if form.title.errors %}
-                        <div class="field-errors"><ul>{% for error in form.title.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
-                    {% endif %}
-                </div>
-                <div class="field field-grow">
-                    <label class="field-label" for="id_description">Description</label>
-                    <textarea id="id_description" name="description" rows="6" placeholder="Setup, data, anything that helps you remember what this experiment was.">{{ form.description.value|default:'' }}</textarea>
+                    <label class="field-label" for="id_description">What I did</label>
+                    <div class="field-help">The setup, the data, the parameters. Enough to reconstruct it in a month.</div>
+                    <textarea id="id_description" name="description" rows="6"
+                        placeholder="I trained a 4-layer model on…">{{ form.description.value|default:'' }}</textarea>
                     {% if form.description.errors %}
                         <div class="field-errors"><ul>{% for error in form.description.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
                     {% endif %}
                 </div>
-            </div>
-        </section>
 
-        <section class="panel">
-            <div class="panel-title">Thinking</div>
-            <div class="panel-body">
-                <div class="field{% if not is_edit %} field-grow{% endif %}">
-                    <label class="field-label" for="id_hypothesis">Hypothesis</label>
-                    <textarea id="id_hypothesis" name="hypothesis" rows="6" placeholder="What did you expect to happen?">{{ form.hypothesis.value|default:'' }}</textarea>
+                <div class="field">
+                    <label class="field-label" for="id_hypothesis">What I expected</label>
+                    <div class="field-help">Write it down before you run it. It is the only way to know later whether you were wrong.</div>
+                    <textarea id="id_hypothesis" name="hypothesis" rows="5"
+                        placeholder="I expected the loss to plateau around…">{{ form.hypothesis.value|default:'' }}</textarea>
                     {% if form.hypothesis.errors %}
                         <div class="field-errors"><ul>{% for error in form.hypothesis.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
                     {% endif %}
                 </div>
+
                 {% if is_edit %}
-                    <div class="field field-grow">
-                        <label class="field-label" for="id_conclusion">Conclusion</label>
-                        <textarea id="id_conclusion" name="conclusion" rows="6" placeholder="What actually happened, and what did you conclude?">{{ form.conclusion.value|default:'' }}</textarea>
+                    <div class="field">
+                        <label class="field-label" for="id_conclusion">What happened</label>
+                        <div class="field-help">What actually happened, and what you concluded from it. <span class="optional">optional until the experiment has run</span></div>
+                        <textarea id="id_conclusion" name="conclusion" rows="5"
+                            placeholder="It turned out that…">{{ form.conclusion.value|default:'' }}</textarea>
                         {% if form.conclusion.errors %}
                             <div class="field-errors"><ul>{% for error in form.conclusion.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
                         {% endif %}
                     </div>
                 {% endif %}
             </div>
-        </section>
 
-        <section class="panel full">
-            <div class="panel-title">Attachments <span class="panel-hint">Any file type, up to 25 MB each</span></div>
-            <div class="panel-body">
-                {% if form.instance.pk and form.instance.files.all %}
-                    <div class="existing-files">
-                        {% for file in form.instance.files.all %}
-                            <div class="existing-file">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                <span class="name">{{ file.original_name|default:file.file.name }}</span>
-                                {% if file.file.size %}<span class="size">{{ file.file.size|filesizeformat }}</span>{% endif %}
-                                <label>
-                                    <input type="checkbox" name="remove_files" value="{{ file.pk }}">
-                                    Remove
-                                </label>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
+            <div class="col-rail">
+                <div class="preview">
+                    <span class="preview-label">Preview</span>
+                    <span class="preview-title{% if not form.title.value %} empty{% endif %}" id="preview-title">{% if form.title.value %}{{ form.title.value }}{% else %}Untitled experiment{% endif %}</span>
+                    <span class="preview-status"><span class="dot"></span>Open</span>
+                </div>
 
                 <div class="field">
-                    <input type="file" name="attachments" multiple>
-                    <div class="field-help">Select as many files as you like - they are stored with the experiment.</div>
+                    <label class="field-label" for="id_attachments">Files</label>
+                    <div class="field-help">Datasets, plots, logs. Up to 25 MB each; allowed types: {{ allowed_extensions|default:"pdf, txt, md, csv, json, log, py, ipynb, png, jpg, jpeg, gif, webp, svg, zip, tar, gz, xlsx, docx, mp4, mov, wav" }}. <span class="optional">optional</span></div>
+
+                    {% if form.instance.pk and form.instance.files.all %}
+                        <div class="existing-files">
+                            {% for file in form.instance.files.all %}
+                                <div class="existing-file">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    <span class="name">{{ file.original_name|default:file.file.name }}</span>
+                                    {% if file.file.size %}<span class="size">{{ file.file.size|filesizeformat }}</span>{% endif %}
+                                    <label>
+                                        <input type="checkbox" name="remove_files" value="{{ file.pk }}">
+                                        Remove
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <input type="file" id="id_attachments" name="attachments" multiple>
                     <div class="selected-files" id="selected-files"></div>
                     {% if form.attachments.errors %}
                         <div class="field-errors"><ul>{% for error in form.attachments.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
                     {% endif %}
                 </div>
+
+                <div class="rail-actions">
+                    <a class="btn-quiet" href="{% url 'research_project' project.pk %}">Cancel</a>
+                    <span class="save-hint">
+                        {% if is_edit %}{{ experiment.created_at|date:"M j, Y" }}{% else %}You can add the conclusion once it has run{% endif %}
+                    </span>
+                </div>
             </div>
-        </section>
+        </div>
     </div>
 </form>
 
 <script>
     (function () {
-        const input = document.querySelector('#experiment-form input[type="file"]');
-        const target = document.getElementById('selected-files');
-        if (!input || !target) return;
-        input.addEventListener('change', function () {
-            target.innerHTML = '';
-            Array.from(input.files || []).forEach(function (file) {
-                const chip = document.createElement('span');
-                chip.className = 'selected-file';
-                chip.textContent = file.name + '  (' + Math.max(1, Math.round(file.size / 1024)) + ' KB)';
-                target.appendChild(chip);
+        const titleInput = document.getElementById('id_title');
+        const previewTitle = document.getElementById('preview-title');
+        if (titleInput && previewTitle) {
+            titleInput.addEventListener('input', function () {
+                const value = titleInput.value.trim();
+                previewTitle.textContent = value || 'Untitled experiment';
+                previewTitle.classList.toggle('empty', !value);
             });
+        }
+
+        // the fields grow with what you write, so there is never a void
+        function autoGrow(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.max(el.scrollHeight, 96) + 'px';
+        }
+        document.querySelectorAll('#experiment-form textarea').forEach(function (el) {
+            autoGrow(el);
+            el.addEventListener('input', function () { autoGrow(el); });
         });
+
+        const fileInput = document.getElementById('id_attachments');
+        const chips = document.getElementById('selected-files');
+        if (fileInput && chips) {
+            fileInput.addEventListener('change', function () {
+                chips.innerHTML = '';
+                Array.from(fileInput.files || []).forEach(function (file) {
+                    const chip = document.createElement('span');
+                    chip.className = 'selected-file';
+                    chip.textContent = file.name + '  (' + Math.max(1, Math.round(file.size / 1024)) + ' KB)';
+                    chips.appendChild(chip);
+                });
+            });
+        }
     })();
 </script>
 {% endblock %}
