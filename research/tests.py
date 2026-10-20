@@ -1389,3 +1389,78 @@ class ExperimentFilePageTests(TempMediaRootMixin, TestCase):
             )
         )
         self.assertEqual(response.status_code, 404)
+
+
+class ProjectOverviewTests(TempMediaRootMixin, TestCase):
+    """The long description of a project: written at creation, edited later."""
+
+    def setUp(self):
+        self.project = ResearchProject.objects.create(
+            acronym='OVER', full_form='Overview full form',
+        )
+
+    def test_a_project_can_be_created_with_a_long_description(self):
+        response = self.client.post(reverse('research_create'), {
+            'acronym': 'LONG',
+            'full_form': 'Long description project',
+            'description': 'the short one',
+            'details': 'the long write-up of the project',
+        })
+        self.assertEqual(response.status_code, 200)
+        project = ResearchProject.objects.get(acronym='LONG')
+        self.assertEqual(project.details, 'the long write-up of the project')
+
+    def test_the_long_description_can_be_written_afterwards(self):
+        response = self.client.post(reverse('research_update'), {
+            'id': self.project.pk,
+            'details': 'written on the project page',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.details, 'written on the project page')
+        self.assertEqual(response.json()['details'], 'written on the project page')
+
+    def test_an_empty_long_description_clears_it(self):
+        self.project.details = 'something'
+        self.project.save()
+        response = self.client.post(reverse('research_update'), {
+            'id': self.project.pk,
+            'details': '',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.details, '')
+
+    def test_a_status_change_does_not_touch_the_long_description(self):
+        self.project.details = 'keep me'
+        self.project.save()
+        response = self.client.post(reverse('research_update'), {
+            'id': self.project.pk,
+            'status': 'paused',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.details, 'keep me')
+        self.assertEqual(self.project.status, 'paused')
+
+    def test_the_long_description_is_capped(self):
+        response = self.client.post(reverse('research_update'), {
+            'id': self.project.pk,
+            'details': 'x' * 30000,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertLessEqual(len(self.project.details), 20000)
+
+    def test_the_project_page_carries_the_editor(self):
+        response = self.client.get(reverse('research_project', args=[self.project.pk]))
+        self.assertContains(response, 'id="overview-edit"')
+        self.assertContains(response, 'id="overview-input"')
+        self.assertContains(response, 'id="overview-save"')
+        self.assertContains(response, 'id="overview-cancel"')
+
+    def test_the_overview_shows_the_text(self):
+        self.project.details = 'the write-up'
+        self.project.save()
+        response = self.client.get(reverse('research_project', args=[self.project.pk]))
+        self.assertContains(response, 'the write-up')

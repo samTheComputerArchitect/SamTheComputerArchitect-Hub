@@ -221,6 +221,87 @@
         color: var(--text-muted);
         font-style: italic;
     }
+    /* the overview can be written right here */
+    .overview-edit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        margin-left: 6px;
+        padding: 0;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .overview-edit:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    #overview-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: 4px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.7;
+        resize: vertical;
+    }
+    #overview-input:focus {
+        outline: none;
+        border-color: var(--color-primary);
+    }
+    .overview-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .overview-save,
+    .overview-cancel {
+        height: 28px;
+        padding: 0 12px;
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    .overview-save {
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        color: var(--bg-primary);
+    }
+    .overview-save:hover {
+        opacity: 0.9;
+    }
+    .overview-save:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+    .overview-cancel {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+    }
+    .overview-cancel:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .overview-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
 
     /* ------------------------------------------------------ experiments -- */
     .experiment-grid {
@@ -590,15 +671,109 @@
         </section>
 
         <section class="panel">
-            <div class="panel-title">Overview</div>
+            <div class="panel-title">
+                Overview
+                <span class="panel-count">{{ project.details|length|default:0 }}</span>
+                <button type="button" class="overview-edit" id="overview-edit" title="Edit the overview" aria-label="Edit the overview">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
+                </button>
+            </div>
             <div class="panel-body">
-                {% if project.details %}
-                    <div class="detail-text">{{ project.details }}</div>
-                {% else %}
-                    <div class="detail-text muted">No long description yet.</div>
-                {% endif %}
+                <div id="overview-text" class="detail-text{% if not project.details %} muted{% endif %}">
+                    {% if project.details %}{{ project.details }}{% else %}No long description yet.{% endif %}
+                </div>
+                <div id="overview-editor" hidden>
+                    <textarea id="overview-input" rows="8" maxlength="20000"
+                              placeholder="The long write-up of this project: the context, the goal, what is already done.">{{ project.details }}</textarea>
+                    <div class="overview-actions">
+                        <button type="button" class="overview-save" id="overview-save">Save</button>
+                        <button type="button" class="overview-cancel" id="overview-cancel">Cancel</button>
+                        <span class="overview-hint" id="overview-hint"></span>
+                    </div>
+                </div>
             </div>
         </section>
     </div>
 </div>
+
+<script>
+    (function () {
+        'use strict';
+
+        const UPDATE_URL = "{% url 'research_update' %}";
+        const CSRF_TOKEN = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        const PROJECT_ID = "{{ project.id }}";
+
+        const textBox = document.getElementById('overview-text');
+        const editorBox = document.getElementById('overview-editor');
+        const input = document.getElementById('overview-input');
+        const saveBtn = document.getElementById('overview-save');
+        const cancelBtn = document.getElementById('overview-cancel');
+        const hint = document.getElementById('overview-hint');
+        const editBtn = document.getElementById('overview-edit');
+        if (!textBox || !editorBox || !input || !saveBtn || !cancelBtn) return;
+
+        function openEditor() {
+            textBox.hidden = true;
+            editorBox.hidden = false;
+            hint.textContent = '';
+            input.focus();
+        }
+
+        function closeEditor() {
+            editorBox.hidden = true;
+            textBox.hidden = false;
+            hint.textContent = '';
+        }
+
+        function showText(value) {
+            const text = (value || '').trim();
+            textBox.textContent = text || 'No long description yet.';
+            textBox.classList.toggle('muted', !text);
+            const count = textBox.parentElement.querySelector('.panel-count');
+            if (count) count.textContent = String(text.length);
+        }
+
+        if (editBtn) {
+            editBtn.addEventListener('click', openEditor);
+        }
+        cancelBtn.addEventListener('click', closeEditor);
+
+        saveBtn.addEventListener('click', async function () {
+            const value = input.value;
+            saveBtn.disabled = true;
+            hint.textContent = 'Saving…';
+            const body = new URLSearchParams();
+            body.append('id', PROJECT_ID);
+            body.append('details', value);
+            body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+            try {
+                const response = await fetch(UPDATE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: body.toString(),
+                });
+                let data = null;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    data = null;
+                }
+                if (response.ok && data) {
+                    showText(data.details !== undefined ? data.details : value);
+                    closeEditor();
+                } else {
+                    hint.textContent = (data && data.error) || 'The overview could not be saved.';
+                }
+            } catch (error) {
+                hint.textContent = 'The overview could not be saved.';
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+    })();
+</script>
 {% endblock %}

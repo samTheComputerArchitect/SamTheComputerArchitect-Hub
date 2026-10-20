@@ -551,6 +551,10 @@
                     <textarea id="research-description" rows="3" maxlength="20000" placeholder="What is this project about?" style="width:100%; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;"></textarea>
                 </div>
                 <div class="form-group">
+                    <label>Long description</label>
+                    <textarea id="research-details" rows="6" maxlength="20000" placeholder="The context, the goal, what is already done. Shown as the overview of the project page." style="width:100%; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:6px 12px;"></textarea>
+                </div>
+                <div class="form-group">
                     <label>Status</label>
                     <select id="research-status" class="panel-select" style="width:100%; height:36px; background:var(--bg-primary); border:1px solid var(--border-light); color:var(--text-primary); padding:0 8px;">
                         {% for value, label in status_choices %}
@@ -578,6 +582,7 @@
                         const acronymField = document.getElementById('research-acronym');
                         const formField = document.getElementById('research-full-form');
                         const descriptionField = document.getElementById('research-description');
+                        const detailsField = document.getElementById('research-details');
                         const statusField = document.getElementById('research-status');
                         const acronym = acronymField ? acronymField.value.trim() : '';
                         const fullForm = formField ? formField.value.trim() : '';
@@ -593,6 +598,7 @@
                                 acronym: acronym,
                                 full_form: fullForm,
                                 description: descriptionField ? descriptionField.value.trim() : '',
+                                details: detailsField ? detailsField.value.trim() : '',
                                 status: statusField ? statusField.value : 'active',
                                 tags: selectedTags,
                             });

@@ -574,6 +574,8 @@ def create_project(request):
     acronym = (request.POST.get('acronym') or '').strip()[:MAX_ACRONYM_LENGTH]
     full_form = (request.POST.get('full_form') or '').strip()[:MAX_FULL_FORM_LENGTH]
     description = (request.POST.get('description') or '').strip()[:MAX_DESCRIPTION_LENGTH]
+    # the long write-up of the project, the one the overview panel shows
+    details = (request.POST.get('details') or '').strip()[:MAX_DESCRIPTION_LENGTH]
     status = (request.POST.get('status') or ResearchProject.STATUS_ACTIVE).strip()
     if status not in dict(ResearchProject.STATUS_CHOICES):
         status = ResearchProject.STATUS_ACTIVE
@@ -585,6 +587,7 @@ def create_project(request):
         acronym=acronym,
         full_form=full_form,
         description=description,
+        details=details,
         status=status,
     )
 
@@ -613,10 +616,17 @@ def update_project(request):
         for tag in ResearchTag.objects.filter(slug__in=request.POST.getlist('tags')):
             project.tags.add(tag)
 
+    if 'details' in request.POST:
+        # the long write-up of the project - only changed when the key is
+        # there, so a status change never touches it
+        project.details = (request.POST.get('details') or '').strip()[:MAX_DESCRIPTION_LENGTH]
+        project.save(update_fields=['details'])
+
     return JsonResponse({
         'id': project.pk,
         'status': project.status,
         'status_color': project.status_color,
+        'details': project.details,
         'tags': [tag.slug for tag in project.tags.all()],
     })
 
