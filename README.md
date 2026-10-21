@@ -12,7 +12,7 @@
 **A self-hosted workspace for your projects, with the tools around them built in.** Keep
 everything in one place and reach for the tool you need without switching apps — a thumbnail
 editor with snapping guides, a freeform notes canvas, a research workbench for hypotheses and
-experiments, and more on the way.
+experiments, and a calendar to put the work on.
 
 Inspired by [NeuralNine](https://github.com/samTheComputerArchitect) and the way it works:
 small, focused tools for each part of the work, one after another, all in the same place.
@@ -25,6 +25,7 @@ as two separate steps, with every card showing which one you are at.
 | **Thumbnails** | A 1280 × 720 canvas editor: layers, snapping guides, shapes, text, image filters, undo/redo, PNG export. |
 | **Notes** | An infinite canvas for ink, sticky notes, headings and images, organised into notebooks → sections → tabs. |
 | **Research** | Projects with tags and statuses, live search, experiments with hypotheses, conclusions and file attachments — and a LaTeX **paper studio** that compiles and previews the paper next to the editor. |
+| **Calendar** | A month, a week and an agenda view, one place for the dates of the work. |
 | **Videos / Editing** | Placeholders for the next two parts of the workflow. |
 | **Settings** | API key storage (Ollama Cloud today), a models panel and the editor preferences (vim mode, the `hjkl` motions). |
 
@@ -156,6 +157,25 @@ right side is the compiled PDF, and the two talk to each other.
 - **Ex commands** — `:w` saves and compiles, `:q` goes back to the project, `:wq` does
   both.
 
+### Calendar
+
+One page for the dates around the work, rendered on the server with no client-side library.
+
+- **Three views** — a month grid, a week grid with an hour ruler, and an agenda of the next
+  30 days. The mini month in the sidebar jumps straight to any day.
+- **Click to create** — click a day in the month, a time slot in the week, or the *New
+  event* button, and the form opens with that day and time already filled in.
+- **Edit and delete** — click a chip and the same dialog opens with the event in it.
+- **Repetition** — an event can repeat every day or every week; the repeat is expanded in
+  the view, not stored as copies.
+- **Time zones** — events are stored in UTC and always shown in the time zone of the
+  browser, which sends its own offset with every request. The grid, the dates and the
+  *Today* button all follow it.
+- **An optional link** — every event can carry one, opened from the chip. Only `http://`
+  and `https://` are accepted, so nothing odd can end up in an `href`.
+- **Events that run over midnight** are allowed — an end time at or before the start is
+  read as the same time on the next day.
+
 ## Keyboard shortcuts
 
 ### Thumbnail editor
@@ -230,12 +250,14 @@ SamTheComputerArchitect-Hub/
 ├── research/                     # Research app
 │   ├── migrations/               # …and the ResearchPaper model (0008)
 │   └── templatetags/             # truncate_chars, get_item
+├── cal/                          # Calendar app (month, week, agenda)
 ├── settings/                     # Settings app (API keys, editor preferences)
 │   └── migrations/               # …and the EditorSetting model (0002)
 ├── templates/                    # Every page, one folder per app
 │   ├── base.html                 # The theme: nav, modal, CSS variables
 │   ├── research/                 # research, detail, experiment, experiment_form,
 │   │                             # experiment_view, experiment_file, paper
+│   ├── calendar/                # The calendar month, week and agenda views
 │   ├── notes/                    # The notes canvas
 │   ├── settings/                 # The settings pages
 │   └── thumbnails/               # thumbnails, editor
@@ -267,10 +289,11 @@ The dev server reloads on changes to the Python code. Django 6.1 caches the comp
 templates, so **a changed template needs a restart** — `touch research/views.py` is enough to
 make the server pick it up again.
 
-`python manage.py test` runs the suite — 269 tests covering the thumbnail API (element CRUD,
+`python manage.py test` runs the suite — 322 tests covering the thumbnail API (element CRUD,
 uploads, colour validation, ownership), the notes API, the research pages (search, filters,
-the experiment workflow, the paper studio, the file viewer) and the settings. Every fix that
-went in came with a regression test that pins it.
+the experiment workflow, the paper studio, the file viewer), the calendar (views, time
+zones, repeats, the event API) and the settings. Every fix that went in came with a
+regression test that pins it.
 
 Pull requests are welcome. Keep the front end dependency-free — if it can be done in plain
 JavaScript, it should be — and match the existing style: the theme lives in
