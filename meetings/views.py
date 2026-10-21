@@ -10,6 +10,7 @@ import json
 import threading
 import time
 import uuid
+from urllib.parse import quote_plus
 
 from django.core.signing import BadSignature, SignatureExpired, dumps, loads
 from django.http import JsonResponse
@@ -46,9 +47,9 @@ def create_meeting(request):
     if google.connected():
         try:
             space = google.create_space()
-        except google.GoogleError:
-            # the meeting exists either way; the Meet link can be retried
-            return redirect(f"{reverse('meetings')}?hint=google-error")
+        except google.GoogleError as exc:
+            # the meeting exists either way; the link can be retried later
+            return redirect(f"{reverse('meetings')}?hint={quote_plus(str(exc))}")
         meeting.meet_uri = space['uri']
         meeting.meet_code = space['code']
         meeting.space_name = space['name']
@@ -66,8 +67,8 @@ def create_meet_link(request, pk):
         return redirect(f"{reverse('meetings')}?hint=missing-client")
     try:
         space = google.create_space()
-    except google.GoogleError:
-        return redirect(f"{reverse('meetings')}?hint=google-error")
+    except google.GoogleError as exc:
+        return redirect(f"{reverse('meetings')}?hint={quote_plus(str(exc))}")
     meeting.meet_uri = space['uri']
     meeting.meet_code = space['code']
     meeting.space_name = space['name']

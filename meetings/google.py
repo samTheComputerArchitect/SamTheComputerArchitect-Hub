@@ -106,9 +106,16 @@ def _post(url, body, bearer=None, json_body=False):
     except urllib.error.HTTPError as exc:
         detail = ''
         try:
-            detail = json.loads(exc.read()).get('error_description', '')
+            body = json.loads(exc.read())
+            # the token endpoint speaks error_description, the rest apis
+            # speak error.message - both deserve to be seen on the page
+            detail = body.get('error_description') or ''
+            if not detail and isinstance(body.get('error'), dict):
+                detail = body['error'].get('message') or ''
+            if not detail and isinstance(body.get('error'), str):
+                detail = body['error']
         except Exception:
-            pass
+            detail = ''
         raise GoogleError(detail or f'Google replied {exc.code}') from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         raise GoogleError(f'Could not reach Google: {exc}') from exc

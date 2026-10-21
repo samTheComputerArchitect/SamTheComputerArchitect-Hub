@@ -85,13 +85,19 @@ class MeetingGoogleLinkTests(TestCase):
 
     def test_a_dead_google_does_not_you_lose_the_meeting(self):
         with patch('meetings.google.create_space') as create_space:
-            create_space.side_effect = google.GoogleError('expired')
+            create_space.side_effect = google.GoogleError(
+                'Google Meet API has not been used in project'
+            )
             self.client.post(reverse('meetings_create'), {'title': 'Design'})
         self.assertEqual(Meeting.objects.filter(title='Design').count(), 1)
         meeting = Meeting.objects.get()
         self.assertEqual(meeting.meet_uri, '')
-        response = self.client.get(reverse('meetings'), {'hint': 'google-error'})
-        self.assertContains(response, 'Google refused the meeting space')
+        # the reason travels to the page, so nothing is swallowed
+        response = self.client.get(
+            reverse('meetings'),
+            {'hint': 'Google Meet API has not been used in project'},
+        )
+        self.assertContains(response, 'has not been used in project')
 
     def test_the_link_can_be_retried_since_it_exists(self):
         meeting = Meeting.objects.create(title='Retry me')
@@ -318,6 +324,23 @@ class GoogleUtilityTests(TestCase):
         with patch('urllib.request.urlopen', return_value=Answer()):
             token = google.access_token()
         self.assertEqual(token, 'brand-new')
+
+    def test_a_rest_error_leaves_its_message(self):
+        """The Meet api speaks error.message, and the sentence reaches the page."""
+        import io
+        from urllib.error import HTTPError
+        body = json.dumps({
+            'error': {
+                'code': 403,
+                'message': 'Google Meet API has not been used in project', 'status': 'PERMISSION_DENIED',
+            },
+        }).encode()
+        error = HTTPError(google.SPACES_URL, 403, 'Forbidden', {}, io.BytesIO(body))
+        with patch('meetings.google.access_token', return_value='tok'):
+            with patch('urllib.request.urlopen', side_effect=error):
+                with self.assertRaises(google.GoogleError) as caught:
+                    google.create_space()
+        self.assertIn('has not been used in project', str(caught.exception))
 
 
 class GoogleErrorTests(TestCase):
