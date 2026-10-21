@@ -215,7 +215,10 @@
             <button type="button" class="call-btn" id="btn-cam" title="Camera on or off">◉</button>
             <button type="button" class="call-btn" id="btn-mic" title="Microphone on or muted">🎙</button>
             <button type="button" class="call-btn" id="btn-screen" title="Share your screen">▣</button>
-            <button type="button" class="call-btn" id="btn-copy" title="Copy the link to this call">↗</button>
+            {% if meeting.meet_uri %}
+            <button type="button" class="call-btn active" id="btn-copy-meet" title="Copy the meet.google.com link">⧉M</button>
+            {% endif %}
+            <button type="button" class="call-btn" id="btn-copy" title="Copy the link of this page (the in-hub call)">⧉H</button>
             <a class="call-leave" id="btn-leave" href="{% url 'meetings' %}">Leave</a>
         </div>
     </div>
@@ -233,8 +236,7 @@
             <span style="margin-top: 6px;">Or the real Meet:</span>
             <a href="{{ meeting.meet_uri }}" target="_blank" rel="noopener">{{ meeting.meet_uri }}</a>
             {% endif %}
-        </div>
-    </aside>
+        </div>    </aside>
 </div>
 
 <script>
@@ -612,6 +614,15 @@ function copyLocation() {
 }
 
 document.getElementById('btn-copy').addEventListener('click', copyLocation);
+const MEET_URI = "{{ meeting.meet_uri|escapejs }}";
+const meetCopy = document.getElementById('btn-copy-meet');
+if (meetCopy) {
+    meetCopy.addEventListener('click', () => {
+        navigator.clipboard.writeText(MEET_URI);
+        meetCopy.title = 'Copied!';
+        setTimeout(() => { meetCopy.title = 'Copy the meet.google.com link'; }, 1500);
+    });
+}
 document.getElementById('share-me').textContent = window.location.host + window.location.pathname;
 
 window.addEventListener('pagehide', () => {
