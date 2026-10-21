@@ -240,8 +240,15 @@ async function peek() {
         for (const box of peekBoxes) {
             const room = data.rooms[box.dataset.room];
             if (!room) { box.textContent = ''; continue; }
+            if (room.error) {
+                box.textContent = room.error;
+                box.classList.remove('live');
+                continue;
+            }
             if (room.live) {
-                box.textContent = 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
+                box.textContent = room.people === null
+                    ? 'In the Meet now'
+                    : 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
                 box.classList.add('live');
             } else {
                 box.textContent = 'The Meet room is quiet';

@@ -51,7 +51,10 @@ def meetings_peek(request):
         except google.GoogleNotConnected:
             return JsonResponse({'ok': False, 'reason': 'not-connected'})
         except google.GoogleError as exc:
-            return JsonResponse({'ok': False, 'reason': str(exc)})
+            # one broken room may not silence the others
+            out[str(meeting.pk)] = {
+                'live': False, 'people': 0, 'error': str(exc),
+            }
     return JsonResponse({'ok': True, 'rooms': out})
 
 

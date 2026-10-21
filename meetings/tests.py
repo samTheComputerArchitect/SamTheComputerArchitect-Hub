@@ -432,7 +432,9 @@ class PeekTests(TestCase):
     def test_a_refusal_from_google_is_passed_on(self):
         with patch('meetings.google.space_peek', side_effect=google.GoogleError('Google replied 403')):
             response = self.client.get(reverse('meetings_peek'))
-        self.assertFalse(response.json()['ok'])
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['rooms'][str(self.meeting.pk)]['error'], 'Google replied 403')
 
     def test_without_goggle_no_peek_is_asked_for(self):
         Meeting.objects.all().delete()
@@ -441,3 +443,37 @@ class PeekTests(TestCase):
         self.assertTrue(data['ok'])
         self.assertEqual(data['rooms'], {})
         unused.assert_not_called()
+
+    def test_a_live_room_without_a_people_list_is_still_live(self):
+        """Some accounts are served the conference but not the people in it."""
+        import io
+        from urllib.error import HTTPError
+        calls = [
+            self.answer({'activeConference': {'conferenceRecord': 'conferenceRecords/RE'}}),
+            HTTPError(google.API_URL, 403, 'Forbidden', {}, io.BytesIO(b'{}')),
+        ]
+
+        def next_answer(request, timeout=0):
+            answer = calls.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        with patch('meetings.google.access_token', return_value='tok'):
+            with patch('urllib.request.urlopen', side_effect=next_answer):
+                peek = google.space_peek('spaces/PKX')
+        self.assertEqual(peek, {'live': True, 'people': None})
+
+    def test_one_broken_room_does_not_silence_the_others(self):
+        other = Meeting.objects.create(title='Second', space_name='spaces/TWO')
+
+        def one_room_at_a_time(name):
+            if name == 'spaces/PKX':
+                raise google.GoogleError('Google replied 500')
+            return {'live': True, 'people': 2}
+
+        with patch('meetings.google.space_peek', side_effect=one_room_at_a_time):
+            data = self.client.get(reverse('meetings_peek')).json()
+        self.assertTrue(data['ok'])
+        self.assertIn('error', data['rooms'][str(self.meeting.pk)])
+        self.assertEqual(data['rooms'][str(other.pk)], {'live': True, 'people': 2})

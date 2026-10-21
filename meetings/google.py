@@ -211,5 +211,10 @@ def space_peek(name):
     record = (space.get('activeConference') or {}).get('conferenceRecord') or ''
     if not record:
         return {'live': False, 'people': 0}
-    people = _get(f'{API_URL}/{record}/participants', token)
+    try:
+        people = _get(f'{API_URL}/{record}/participants', token)
+    except GoogleError:
+        # the conference is live, but the list of people is not served -
+        # the liveness still holds, so the page says the room is busy
+        return {'live': True, 'people': None}
     return {'live': True, 'people': len(people.get('participants') or [])}

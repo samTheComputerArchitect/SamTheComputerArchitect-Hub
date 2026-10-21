@@ -670,8 +670,15 @@ async function peek() {
         }
         const room = data.rooms['{{ meeting.pk }}'];
         if (!room) { peekSpot.textContent = ''; return; }
+        if (room.error) {
+            peekSpot.textContent = room.error;
+            peekSpot.classList.remove('live');
+            return;
+        }
         if (room.live) {
-            peekSpot.textContent = 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
+            peekSpot.textContent = room.people === null
+                ? 'In the Meet now'
+                : 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
             peekSpot.classList.add('live');
         } else {
             peekSpot.textContent = 'The Meet room is quiet';
