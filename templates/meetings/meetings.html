@@ -128,6 +128,13 @@
     .google-state.on {
         color: var(--color-success);
     }
+    .meeting-peek {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .meeting-peek.live {
+        color: var(--color-success);
+    }
 </style>
 
 {% endblock %}
@@ -153,6 +160,7 @@
                     </form>
                 </div>
                 {% if meeting.meet_uri %}
+                    <span class="meeting-peek" data-room="{{ meeting.pk }}">looking into the Meet…</span>
                     <div class="meeting-item-row">
                         <a class="meeting-link-chip" href="{{ meeting.meet_uri }}" target="_blank" rel="noopener">{{ meeting.meet_uri }}</a>
                     </div>
@@ -215,5 +223,38 @@
         </p>
     </section>
 </div>
+
+<script>
+const PEEK_URL = '{% url "meetings_peek" %}';
+const peekBoxes = document.querySelectorAll('[data-room]');
+
+async function peek() {
+    try {
+        const answer = await fetch(PEEK_URL);
+        if (!answer.ok) return;
+        const data = await answer.json();
+        if (!data.ok) {
+            for (const box of peekBoxes) box.textContent = data.reason === 'not-connected' ? '' : data.reason;
+            return;
+        }
+        for (const box of peekBoxes) {
+            const room = data.rooms[box.dataset.room];
+            if (!room) { box.textContent = ''; continue; }
+            if (room.live) {
+                box.textContent = 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
+                box.classList.add('live');
+            } else {
+                box.textContent = 'The Meet room is quiet';
+                box.classList.remove('live');
+            }
+        }
+    } catch (e) { /* the dev server stops for a breath; it will come back */ }
+}
+
+if (peekBoxes.length) {
+    peek();
+    setInterval(peek, 15000);
+}
+</script>
 
 {% endblock %}

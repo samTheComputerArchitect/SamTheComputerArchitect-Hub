@@ -36,6 +36,25 @@ def meetings_page(request):
     })
 
 
+@require_GET
+def meetings_peek(request):
+    """What Google says about every row'sMeet space, as one small json.
+
+    A page asks every so often; the answer carries only what the Meet
+    REST API publishes: whether a conference is live in the space and
+    how many people are in it. Nothing here pipes the media.
+    """
+    out = {}
+    for meeting in Meeting.objects.exclude(space_name=''):
+        try:
+            out[str(meeting.pk)] = google.space_peek(meeting.space_name)
+        except google.GoogleNotConnected:
+            return JsonResponse({'ok': False, 'reason': 'not-connected'})
+        except google.GoogleError as exc:
+            return JsonResponse({'ok': False, 'reason': str(exc)})
+    return JsonResponse({'ok': True, 'rooms': out})
+
+
 @require_POST
 def create_meeting(request):
     """A new meeting row, dressed with a Meet link when Google allows it."""

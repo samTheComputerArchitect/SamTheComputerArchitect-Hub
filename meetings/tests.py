@@ -380,3 +380,64 @@ class GoogleErrorTests(TestCase):
         with patch('urllib.request.urlopen', side_effect=error):
             with self.assertRaises(google.GoogleError):
                 google.access_token()
+
+
+class PeekTests(TestCase):
+    """The keyhole of facts the api says about a space, and the hub page of them."""
+
+    def setUp(self):
+        self.meeting = Meeting.objects.create(title='Quiet', space_name='spaces/PKX')
+        self.row = GoogleCredential.load()
+        self.row.refresh_token = 'refreshing-token'
+        self.row.save()
+
+    @staticmethod
+    def answer(payload):
+        class Answer:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self):
+                return json.dumps(payload).encode()
+        return Answer()
+
+    def test_a_quiet_space_is_reported_as_quiet(self):
+        with patch('meetings.google.access_token', return_value='tok'):
+            with patch('urllib.request.urlopen', return_value=self.answer({})):
+                peek = google.space_peek('spaces/PKX')
+        self.assertEqual(peek, {'live': False, 'people': 0})
+
+    def test_a_live_space_is_counted(self):
+        calls = [
+            self.answer({'activeConference': {'conferenceRecord': 'conferenceRecords/RE'}}),
+            self.answer({'participants': [{'name': 'a'}, {'name': 'b'}]}),
+        ]
+
+        def next_answer(request, timeout=0):
+            self.assertTrue(request.get_header('Authorization').endswith('tok'))
+            return calls.pop(0)
+
+        with patch('meetings.google.access_token', return_value='tok'):
+            with patch('urllib.request.urlopen', side_effect=next_answer):
+                peek = google.space_peek('spaces/PKX')
+        self.assertEqual(peek, {'live': True, 'people': 2})
+
+    def test_the_peek_page_carries_every_spaced_row(self):
+        Meeting.objects.create(title='No link yet')
+        with patch('meetings.google.space_peek', return_value={'live': True, 'people': 3}):
+            data = self.client.get(reverse('meetings_peek')).json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['rooms'][str(self.meeting.pk)], {'live': True, 'people': 3})
+        self.assertEqual(len(data['rooms']), 1)
+
+    def test_a_refusal_from_google_is_passed_on(self):
+        with patch('meetings.google.space_peek', side_effect=google.GoogleError('Google replied 403')):
+            response = self.client.get(reverse('meetings_peek'))
+        self.assertFalse(response.json()['ok'])
+
+    def test_without_goggle_no_peek_is_asked_for(self):
+        Meeting.objects.all().delete()
+        with patch('meetings.google.space_peek') as unused:
+            data = self.client.get(reverse('meetings_peek')).json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['rooms'], {})
+        unused.assert_not_called()

@@ -213,6 +213,13 @@
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border);
     }
+    .meeting-peek {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .meeting-peek.live {
+        color: var(--color-success);
+    }
 </style>
 
 <div class="call-layout">
@@ -255,6 +262,7 @@
             {% if meeting.meet_uri %}
             <span style="margin-top: 6px;">Or the real Meet:</span>
             <a href="{{ meeting.meet_uri }}" target="_blank" rel="noopener">{{ meeting.meet_uri }}</a>
+            <span class="meeting-peek" id="meet-peek">looking into the Meet…</span>
             {% endif %}
         </div>    </aside>
 </div>
@@ -644,6 +652,38 @@ if (meetCopy) {
     });
 }
 document.getElementById('share-me').textContent = window.location.host + window.location.pathname;
+
+/* what Google is willing to say about the real Meet room, every so often */
+
+const peekSpot = document.getElementById('meet-peek');
+
+async function peek() {
+    if (!peekSpot) return;
+    try {
+        const answer = await fetch('/meetings/peek/');
+        if (!answer.ok) return;
+        const data = await answer.json();
+        if (!data.ok) {
+            peekSpot.textContent = data.reason === 'not-connected' ? '' : data.reason;
+            peekSpot.classList.remove('live');
+            return;
+        }
+        const room = data.rooms['{{ meeting.pk }}'];
+        if (!room) { peekSpot.textContent = ''; return; }
+        if (room.live) {
+            peekSpot.textContent = 'In the Meet now — ' + room.people + (room.people === 1 ? ' person' : ' people');
+            peekSpot.classList.add('live');
+        } else {
+            peekSpot.textContent = 'The Meet room is quiet';
+            peekSpot.classList.remove('live');
+        }
+    } catch (e) { /* the server ducks for a moment */ }
+}
+
+if (peekSpot) {
+    peek();
+    setInterval(peek, 15000);
+}
 
 window.addEventListener('pagehide', () => {
     if (navigator.sendBeacon) {

@@ -20,10 +20,17 @@ from settings.models import GoogleCredential
 
 AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
+API_URL = 'https://meet.googleapis.com/v2'
 SPACES_URL = 'https://meet.googleapis.com/v2/spaces'
 
-# creating a space is the only Meet REST call the app makes
-SCOPE = 'https://www.googleapis.com/auth/meetings.space.created'
+# creating a space is the *only* change the app makes on Google; the read
+# scope comes along so the hub can peek at the facts Meet is willing to
+# say about a space - is a conference live there right now, how many
+# people are in it. The streams themselves are never served to the api.
+SCOPE = ' '.join([
+    'https://www.googleapis.com/auth/meetings.space.created',
+    'https://www.googleapis.com/auth/meetings.space.read',
+])
 
 
 class GoogleNotConnected(Exception):
@@ -91,6 +98,34 @@ def exchange_code(request, code):
     return client
 
 
+def _refusal(exc):
+    """The sentence Google put inside its error response, or a code."""
+    detail = ''
+    try:
+        body = json.loads(exc.read())
+        # the token endpoint speaks error_description, the rest apis
+        # speak error.message - both deserve to be seen on the page
+        detail = body.get('error_description') or ''
+        if not detail and isinstance(body.get('error'), dict):
+            detail = body['error'].get('message') or ''
+        if not detail and isinstance(body.get('error'), str):
+            detail = body['error']
+    except Exception:
+        detail = ''
+    return detail or f'Google replied {exc.code}'
+
+
+def _get(url, bearer):
+    request = urllib.request.Request(url, headers={'Authorization': f'Bearer {bearer}'})
+    try:
+        with urllib.request.urlopen(request, timeout=25) as answer:
+            return json.loads(answer.read())
+    except urllib.error.HTTPError as exc:
+        raise GoogleError(_refusal(exc)) from exc
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise GoogleError(f'Could not reach Google: {exc}') from exc
+
+
 def _post(url, body, bearer=None, json_body=False):
     headers = {}
     if json_body:
@@ -104,19 +139,7 @@ def _post(url, body, bearer=None, json_body=False):
         with urllib.request.urlopen(request, timeout=25) as answer:
             return json.loads(answer.read())
     except urllib.error.HTTPError as exc:
-        detail = ''
-        try:
-            body = json.loads(exc.read())
-            # the token endpoint speaks error_description, the rest apis
-            # speak error.message - both deserve to be seen on the page
-            detail = body.get('error_description') or ''
-            if not detail and isinstance(body.get('error'), dict):
-                detail = body['error'].get('message') or ''
-            if not detail and isinstance(body.get('error'), str):
-                detail = body['error']
-        except Exception:
-            detail = ''
-        raise GoogleError(detail or f'Google replied {exc.code}') from exc
+        raise GoogleError(_refusal(exc)) from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         raise GoogleError(f'Could not reach Google: {exc}') from exc
 
@@ -171,3 +194,22 @@ def create_space():
         'code': data.get('meetingCode') or '',
         'name': data.get('name') or '',
     }
+
+
+def space_peek(name):
+    """The facts Meet publishes about a space through the api.
+
+    One GET tells whether a conference is live in the space this second;
+    a second GET switches on the live conference and counts the people
+    in it. That is the whole catalogue of what the REST side knows: the
+    cameras and the microphones of a Meet call are never served here,
+    which is exactly why the hub can only look through a keyhole.
+    """
+    token = access_token()
+    path = name if name.startswith('spaces/') else f'spaces/{name}'
+    space = _get(f'{API_URL}/{path}', token)
+    record = (space.get('activeConference') or {}).get('conferenceRecord') or ''
+    if not record:
+        return {'live': False, 'people': 0}
+    people = _get(f'{API_URL}/{record}/participants', token)
+    return {'live': True, 'people': len(people.get('participants') or [])}

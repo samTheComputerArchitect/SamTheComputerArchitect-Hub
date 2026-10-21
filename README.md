@@ -206,6 +206,12 @@ right, all in the app's own theme with no extra libraries.
   door being the developer-preview Media API), so a person who joined the Meet link will
   never appear in the grid of the call page, and the other way round. The call page says
   so above the grid.
+- **The peek** — every meetings page asks for the facts Google publishes about the rows'
+  spaces: whether a conference is live in the Meet right now and how many people are in
+  it (a green `In the Meet now — 2 people` on the row, refreshed every 15 s, by way of the
+  `meetings_peek` endpoint and the meetings.space.read scope). That keyhole is the whole
+  catalogue: the cameras and microphones of a Meet call are never served over the REST
+  api, so the peek stays out of the streams.
 - **The credentials** — the client id and the secret live on *Settings → API Keys*, and
   the refresh token in the same row of the database, never sent back to the page.
 
