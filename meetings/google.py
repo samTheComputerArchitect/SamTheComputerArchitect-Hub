@@ -29,7 +29,7 @@ SPACES_URL = 'https://meet.googleapis.com/v2/spaces'
 # people are in it. The streams themselves are never served to the api.
 SCOPE = ' '.join([
     'https://www.googleapis.com/auth/meetings.space.created',
-    'https://www.googleapis.com/auth/meetings.space.read',
+    'https://www.googleapis.com/auth/meetings.space.readonly',
 ])
 
 
