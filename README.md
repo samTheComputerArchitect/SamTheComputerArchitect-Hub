@@ -197,7 +197,9 @@ right, all in the app's own theme with no extra libraries.
 - **The Google side** — connect the hub to Google once (the *Connect Google* button) and
   every new meeting gets a real `meet.google.com` link minted by the Meet REST API
   (`spaces.create`, the `meetings.space.created` scope), for the people who would rather
-  be in the actual Meet. Tokens are renewed by the server; a link can be retried on any
+  be in the actual Meet. Spaces are created **open** on purpose — anyone with the link
+  joins without knocking, since admission requests would otherwise wait for the organizer
+  inside Meet itself. Tokens are renewed by the server; a link can be retried on any
   row that has none.
 - **The credentials** — the client id and the secret live on *Settings → API Keys*, and
   the refresh token in the same row of the database, never sent back to the page.

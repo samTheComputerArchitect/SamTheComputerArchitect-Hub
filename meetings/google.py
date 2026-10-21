@@ -156,9 +156,16 @@ def access_token(client=None):
 
 
 def create_space():
-    """A meeting space with a real meet.google.com link of its own."""
+    """A meeting space with a real meet.google.com link of its own.
+
+    The space is created open on purpose: a person who has the link can
+    walk in without knocking, and the knock request would otherwise be
+    handed to the organizer inside Meet itself - a window that, unless
+    the owner opens the call in person, stays empty forever.
+    """
     token = access_token()
-    data = _post(SPACES_URL, b'{}', bearer=token, json_body=True)
+    body = json.dumps({'config': {'accessType': 'OPEN'}}).encode()
+    data = _post(SPACES_URL, body, bearer=token, json_body=True)
     return {
         'uri': data.get('meetingUri') or '',
         'code': data.get('meetingCode') or '',

@@ -286,6 +286,28 @@ class GoogleUtilityTests(TestCase):
         self.assertEqual(space['uri'], 'https://meet.google.com/abc-defg-hij')
         self.assertEqual(space['name'], 'spaces/OHYES')
 
+    def test_the_spaces_are_created_open(self):
+        """Nobody waits at the door: the link itself is the invitation."""
+        captured = {}
+
+        class Answer:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self):
+                return json.dumps({
+                    'meetingUri': 'https://meet.google.com/abc-defg-hij',
+                }).encode()
+
+        def remember(request, timeout=0):
+            captured['body'] = request.data
+            return Answer()
+
+        with patch('meetings.google.access_token', return_value='tok'):
+            with patch('urllib.request.urlopen', side_effect=remember):
+                google.create_space()
+        body = json.loads(captured['body'])
+        self.assertEqual(body['config']['accessType'], 'OPEN')
+
     def test_the_code_exchange_saves_the_refresh_token(self):
         class FakeRequest:
             def build_absolute_uri(self, path=''):
