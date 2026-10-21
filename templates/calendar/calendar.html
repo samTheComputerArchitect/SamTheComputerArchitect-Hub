@@ -1,0 +1,873 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Calendar{% endblock %}
+
+{% block content %}
+<style>
+    main {
+        padding: 0;
+    }
+    .page-header {
+        display: none !important;
+    }
+    .cal-shell {
+        display: grid;
+        grid-template-columns: 232px minmax(0, 1fr);
+        min-height: calc(100vh - 52px);
+    }
+    @media (max-width: 900px) {
+        .cal-shell {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .cal-side {
+            display: none;
+        }
+    }
+
+    /* ------------------------------------------------------- the top bar -- */
+    .cal-topbar {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+        min-width: 190px;
+    }
+    .cal-nav {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .cal-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 30px;
+        min-width: 30px;
+        padding: 0 10px;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .cal-btn:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .cal-spacer {
+        flex: 1;
+    }
+    .cal-views {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+    }
+    .cal-view {
+        height: 26px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        background: none;
+        border: none;
+        border-radius: 3px;
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .cal-view.active {
+        background: var(--color-primary-soft);
+        color: var(--color-primary-light);
+    }
+    .cal-view:hover:not(.active) {
+        color: var(--text-primary);
+    }
+
+    /* --------------------------------------------------------- the side -- */
+    .cal-side {
+        padding: 16px;
+        border-right: 1px solid var(--border);
+    }
+    .cal-mini-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 10px;
+    }
+    .cal-mini {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 2px;
+    }
+    .cal-mini-head {
+        font-size: 9px;
+        color: var(--text-muted);
+        text-align: center;
+        padding-bottom: 4px;
+    }
+    .cal-mini-day {
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        border-radius: 3px;
+        font-family: var(--font-sans);
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+    }
+    .cal-mini-day:hover {
+        background: var(--color-primary-soft);
+        color: var(--color-primary-light);
+    }
+    .cal-mini-day.outside {
+        color: var(--text-nav);
+    }
+    .cal-mini-day.today {
+        background: var(--color-primary);
+        color: var(--bg-primary);
+        font-weight: 700;
+    }
+    .cal-new {
+        width: 100%;
+        margin-top: 16px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: var(--color-primary);
+        border: 1px solid var(--color-primary);
+        border-radius: var(--radius-sm);
+        color: var(--bg-primary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+    .cal-new:hover {
+        opacity: 0.9;
+    }
+    .cal-legend {
+        margin-top: 18px;
+        font-size: 11px;
+        line-height: 1.7;
+        color: var(--text-muted);
+    }
+
+    /* ------------------------------------------------------ the month -- */
+    .cal-main {
+        min-width: 0;
+        padding: 0 20px 24px;
+    }
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        border-left: 1px solid var(--border);
+    }
+    .cal-weekday {
+        padding: 10px 8px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-cell {
+        min-height: 108px;
+        padding: 6px;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .cal-cell:hover {
+        background: var(--bg-secondary);
+    }
+    .cal-cell.outside {
+        background: var(--bg-secondary);
+    }
+    .cal-cellnum {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+    .cal-cell.outside .cal-cellnum {
+        color: var(--text-nav);
+    }
+    .cal-cellnum.today {
+        background: var(--color-primary);
+        color: var(--bg-primary);
+        font-weight: 700;
+    }
+    .cal-chip {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        margin-bottom: 2px;
+        padding: 2px 5px;
+        background: var(--color-primary-soft);
+        border: none;
+        border-left: 2px solid var(--color-primary);
+        border-radius: 2px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        line-height: 1.4;
+        text-align: left;
+        cursor: pointer;
+        overflow: hidden;
+    }
+    .cal-chip:hover {
+        background: rgba(82, 148, 226, 0.22);
+    }
+    .cal-chip .dot {
+        width: 5px;
+        height: 5px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: var(--color-primary);
+    }
+    .cal-chip .time {
+        color: var(--color-primary-light);
+        font-size: 10px;
+        flex: 0 0 auto;
+    }
+    .cal-chip .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* the little arrow that opens the link of an event in a new tab */
+    .cal-eventlink {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 16px;
+        height: 16px;
+        margin-left: auto;
+        color: var(--color-primary-light);
+        opacity: 0.75;
+        text-decoration: none;
+        transition: opacity 0.15s, color 0.15s;
+    }
+    .cal-eventlink:hover {
+        opacity: 1;
+        color: var(--color-primary);
+    }
+    .cal-eventlink svg {
+        width: 11px;
+        height: 11px;
+    }
+    .cal-block .label {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .cal-block.short .label {
+        display: inline;
+    }
+    .cal-more {
+        font-size: 10px;
+        color: var(--text-muted);
+        padding-left: 5px;
+    }
+
+    /* ------------------------------------------------------- the week -- */
+    .cal-week {
+        display: grid;
+        grid-template-columns: 56px repeat(7, minmax(0, 1fr));
+        border-left: 1px solid var(--border);
+    }
+    .cal-week-gutter {
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-hour {
+        height: 44px;
+        font-size: 10px;
+        color: var(--text-muted);
+        text-align: right;
+        padding-right: 8px;
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-hours {
+        border-right: 1px solid var(--border);
+    }
+    /* one column per day: the hours are lines inside it and the events
+       float on the column at the position of their time */
+    .cal-daybody {
+        position: relative;
+        border-right: 1px solid var(--border);
+    }
+    .cal-hourline {
+        height: 44px;
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-dayhead {
+        padding: 8px;
+        text-align: center;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-dayhead .name {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+    }
+    .cal-dayhead .num {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-top: 2px;
+    }
+    .cal-dayhead.today .num {
+        color: var(--color-primary-light);
+    }
+    .cal-block {
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        padding: 2px 5px;
+        background: var(--color-primary-soft);
+        border: none;
+        border-left: 2px solid var(--color-primary);
+        border-radius: 2px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 10px;
+        line-height: 1.35;
+        text-align: left;
+        cursor: pointer;
+        overflow: hidden;
+    }
+    .cal-block:hover {
+        background: rgba(82, 148, 226, 0.22);
+    }
+    .cal-block .time {
+        color: var(--color-primary-light);
+        display: block;
+    }
+    /* a short event has room for one line only */
+    .cal-block.short .time {
+        display: inline;
+        margin-right: 4px;
+    }
+
+    /* ----------------------------------------------------- the agenda -- */
+    .cal-agenda {
+        max-width: 760px;
+        padding-top: 16px;
+    }
+    .cal-agenda-day {
+        margin-bottom: 18px;
+    }
+    .cal-agenda-date {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+    }
+    .cal-agenda-date.today {
+        color: var(--color-primary-light);
+    }
+    .cal-agenda-item {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        width: 100%;
+        padding: 8px 10px;
+        margin-bottom: 4px;
+        background: var(--bg-secondary);
+        border: none;
+        border-left: 2px solid var(--color-primary);
+        border-radius: 2px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .cal-agenda-item:hover {
+        background: var(--bg-tertiary);
+    }
+    .cal-agenda-item .time {
+        min-width: 92px;
+        color: var(--color-primary-light);
+        font-size: 12px;
+    }
+    .cal-agenda-item .name {
+        flex: 1;
+    }
+    .cal-agenda-item .repeat {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .cal-empty {
+        padding: 30px 10px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.7;
+    }
+
+    /* ------------------------------------------------------ the dialog -- */
+    .cal-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .cal-field label {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+    .cal-field input,
+    .cal-field select {
+        width: 100%;
+        box-sizing: border-box;
+        height: 34px;
+        padding: 0 10px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: 3px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+    }
+    .cal-field input:focus,
+    .cal-field select:focus {
+        outline: none;
+        border-color: var(--color-primary);
+    }
+    .cal-form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .cal-form-error {
+        margin: 0;
+        min-height: 16px;
+        font-size: 12px;
+        color: var(--color-danger-light);
+    }
+    /* the message of a failed save, outside the modal */
+    .cal-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translate(-50%, 20px);
+        z-index: 3000;
+        max-width: 520px;
+        padding: 12px 18px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--color-danger);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.5;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s, transform 0.2s;
+    }
+    .cal-toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+</style>
+
+<div class="cal-shell">
+    <div class="cal-topbar">
+        <div class="cal-nav">
+            <a class="cal-btn" href="{% url 'calendar' %}?view={{ view }}&date={{ today|date:'Y-m-d' }}&tz={{ tz_offset }}" title="Today">Today</a>
+            <a class="cal-btn" href="{% url 'calendar' %}?view={{ view }}&date={{ previous_date }}&tz={{ tz_offset }}" title="Previous">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            </a>
+            <a class="cal-btn" href="{% url 'calendar' %}?view={{ view }}&date={{ next_date }}&tz={{ tz_offset }}" title="Next">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+            </a>
+        </div>
+        <span class="cal-title">{{ title }}</span>
+        <span class="cal-spacer"></span>
+        <div class="cal-views">
+            <a class="cal-view{% if view == 'month' %} active{% endif %}" href="{% url 'calendar' %}?view=month&date={{ today|date:'Y-m-d' }}&tz={{ tz_offset }}">Month</a>
+            <a class="cal-view{% if view == 'week' %} active{% endif %}" href="{% url 'calendar' %}?view=week&date={{ today|date:'Y-m-d' }}&tz={{ tz_offset }}">Week</a>
+            <a class="cal-view{% if view == 'agenda' %} active{% endif %}" href="{% url 'calendar' %}?view=agenda&date={{ today|date:'Y-m-d' }}&tz={{ tz_offset }}">Agenda</a>
+        </div>
+    </div>
+
+    <aside class="cal-side">
+        <div class="cal-mini-title">{{ title }}</div>
+        <div class="cal-mini">
+            {% for name in weekday_names %}<span class="cal-mini-head">{{ name }}</span>{% endfor %}
+            {% for week in mini_weeks %}
+                {% for cell in week %}
+                    <a class="cal-mini-day{% if cell.outside %} outside{% endif %}{% if cell.day == today %} today{% endif %}"
+                       href="{% url 'calendar' %}?view=month&date={{ cell.day|date:'Y-m-d' }}&tz={{ tz_offset }}"
+                       title="{{ cell.day|date:'F j, Y' }}">{{ cell.day.day }}</a>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        <button type="button" class="cal-new" id="cal-new">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            New event
+        </button>
+        <p class="cal-legend">
+            The times are the ones of this browser. A repeating event repeats
+            from its first date onwards.
+        </p>
+    </aside>
+
+    <div class="cal-main">
+        {% if view == 'month' %}
+            <div class="cal-grid">
+                {% for name in weekday_names %}<div class="cal-weekday">{{ name }}</div>{% endfor %}
+                {% for cell in cells %}
+                    <div class="cal-cell{% if cell.outside %} outside{% endif %}" data-date="{{ cell.day|date:'Y-m-d' }}">
+                        <div class="cal-cellnum{% if cell.is_today %} today{% endif %}">{{ cell.day.day }}</div>
+                        {% for item in cell.items %}
+                            <div class="cal-chip" role="button" tabindex="0" data-event="{{ item.event.pk }}">
+                                <span class="dot"></span>
+                                <span class="time">{{ item.start|date:'H:i' }}</span>
+                                <span class="name">{{ item.event.title }}</span>
+                                {% if item.event.url %}
+                                    <a class="cal-eventlink" href="{{ item.event.url }}" target="_blank" rel="noopener noreferrer" title="Open the link" aria-label="Open the link of {{ item.event.title }}">{% include "calendar/link-icon.html" %}</a>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% elif view == 'week' %}
+            <div class="cal-week">
+                <div class="cal-week-gutter"></div>
+                {% for day in week_days %}
+                    <div class="cal-dayhead{% if day.is_today %} today{% endif %}">
+                        <div class="name">{{ day.name }}</div>
+                        <div class="num">{{ day.day.day }}</div>
+                    </div>
+                {% endfor %}
+                <div class="cal-hours">
+                    {% for hour in hours %}
+                        <div class="cal-hour">{{ hour }}:00</div>
+                    {% endfor %}
+                </div>
+                {% for day in week_days %}
+                    <div class="cal-daybody" data-date="{{ day.day|date:'Y-m-d' }}">
+                        {% for hour in hours %}
+                            <div class="cal-hourline" data-hour="{{ hour }}"></div>
+                        {% endfor %}
+                        {% for item in day.items %}
+                            <div class="cal-block{% if item.height < 34 %} short{% endif %}" role="button" tabindex="0" data-event="{{ item.event.pk }}"
+                                 style="top: {{ item.top }}px; height: {{ item.height }}px">
+                                <span class="time">{{ item.start|date:'H:i' }} &ndash; {{ item.end|date:'H:i' }}</span>
+                                <span class="label">{{ item.event.title }}</span>
+                                {% if item.event.url %}
+                                    <a class="cal-eventlink" href="{{ item.event.url }}" target="_blank" rel="noopener noreferrer" title="Open the link" aria-label="Open the link of {{ item.event.title }}">{% include "calendar/link-icon.html" %}</a>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="cal-agenda">
+                {% for day in agenda_days %}
+                    <div class="cal-agenda-day">
+                        <div class="cal-agenda-date{% if day.is_today %} today{% endif %}">
+                            {{ day.day|date:'l, F j' }}{% if day.is_today %} · today{% endif %}
+                        </div>
+                        {% for item in day.items %}
+                            <div class="cal-agenda-item" role="button" tabindex="0" data-event="{{ item.event.pk }}">
+                                <span class="time">{{ item.start|date:'H:i' }} – {{ item.end|date:'H:i' }}</span>
+                                <span class="name">{{ item.event.title }}</span>
+                                {% if item.event.repeat != 'none' %}
+                                    <span class="repeat">every {{ item.event.repeat }}</span>
+                                {% endif %}
+                                {% if item.event.url %}
+                                    <a class="cal-eventlink" href="{{ item.event.url }}" target="_blank" rel="noopener noreferrer" title="Open the link" aria-label="Open the link of {{ item.event.title }}">{% include "calendar/link-icon.html" %}</a>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% empty %}
+                    <p class="cal-empty">Nothing in the next 30 days. Click a day in the month view to add something.</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{{ events_json|json_script:"calendar-events" }}
+
+<script>
+    (function () {
+        'use strict';
+
+        const CREATE_URL = "{% url 'calendar_event_create' %}";
+        const VIEW = "{{ view }}";
+        const BACK_DATE = "{{ anchor_date|default:today|date:'Y-m-d' }}";
+        const CALENDAR_URL = "{% url 'calendar' %}";
+
+        /* the offset of this browser, so the server can show the times in
+           the same time zone the visitor is in. this is the value of
+           Date.getTimezoneOffset(): utc minus local, in minutes */
+        const TZ = String(new Date().getTimezoneOffset());
+
+        /* the form lives in a modal, so it carries the csrf token itself */
+        const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+        function escapeHtml(value) {
+            return String(value === undefined || value === null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function pad(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function formHtml(action, values) {
+            return `
+                <form class="cal-form" id="cal-form" method="post" action="${action}">
+                    <input type="hidden" name="csrfmiddlewaretoken" value="${escapeHtml(CSRF)}">
+                    <input type="hidden" name="tz" value="${TZ}">
+                    <input type="hidden" name="view" value="${VIEW}">
+                    <input type="hidden" name="back_date" value="${BACK_DATE}">
+                    <div class="cal-field">
+                        <label for="cal-title">Title</label>
+                        <input type="text" id="cal-title" name="title" maxlength="200"
+                               value="${escapeHtml(values.title)}" placeholder="What is it?" autocomplete="off" required>
+                    </div>
+                    <div class="cal-field">
+                        <label for="cal-date">Date</label>
+                        <input type="date" id="cal-date" name="date" value="${escapeHtml(values.date)}" required>
+                    </div>
+                    <div class="cal-form-row">
+                        <div class="cal-field">
+                            <label for="cal-start">From</label>
+                            <input type="time" id="cal-start" name="start" value="${escapeHtml(values.start)}" required>
+                        </div>
+                        <div class="cal-field">
+                            <label for="cal-end">To</label>
+                            <input type="time" id="cal-end" name="end" value="${escapeHtml(values.end)}" required>
+                        </div>
+                    </div>
+                    <div class="cal-field">
+                        <label for="cal-url">Link (optional)</label>
+                        <input type="url" id="cal-url" name="url" maxlength="500"
+                               value="${escapeHtml(values.url)}" placeholder="https://..." autocomplete="off">
+                    </div>
+                    <div class="cal-field">
+                        <label for="cal-repeat">Repeat</label>
+                        <select id="cal-repeat" name="repeat">
+                            <option value="none"${values.repeat === 'none' ? ' selected' : ''}>Does not repeat</option>
+                            <option value="daily"${values.repeat === 'daily' ? ' selected' : ''}>Every day</option>
+                            <option value="weekly"${values.repeat === 'weekly' ? ' selected' : ''}>Every week</option>
+                        </select>
+                    </div>
+                    ${values.pk ? `<input type="hidden" name="pk" value="${values.pk}">` : ''}
+                    <p class="cal-form-error" id="cal-hint"></p>
+                </form>`;
+        }
+
+        /* The site modal closes itself when a button is clicked, so a
+           message inside it would be gone before anyone could read it.
+           The toast lives outside and stays. */
+        function showHint(message) {
+            let toast = document.getElementById('cal-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'cal-toast';
+                toast.className = 'cal-toast';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(function () {
+                toast.classList.remove('show');
+            }, 6000);
+        }
+
+        function submitForm(form) {
+            const body = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF },
+                body: body,
+            }).then(function (response) {
+                if (response.status === 403) {
+                    // the page is older than the server: the token is stale
+                    showHint('This page is out of date - reload it and try again.');
+                    return;
+                }
+                if (response.status === 400) {
+                    return response.json().then(function (data) {
+                        showHint((data && data.error) || 'The event could not be saved.');
+                    });
+                }
+                if (response.ok) {
+                    window.location.href = response.url;
+                    return;
+                }
+                showHint('The event could not be saved (HTTP ' + response.status + ').');
+            }).catch(function () {
+                showHint('The event could not be saved - the server did not answer.');
+            });
+        }
+
+        function openForm(title, action, values, extraButton) {
+            const buttons = [];
+            if (extraButton) {
+                buttons.push(extraButton);
+            }
+            buttons.push({ text: 'Cancel', className: 'modal-btn' });
+            buttons.push({
+                text: 'Save',
+                className: 'modal-btn modal-btn-primary',
+            });
+            showModal(title, formHtml(action, values), buttons);
+            // the form lives in the modal body, the save button outside of
+            // it - the form attribute ties the two together
+            const save = document.querySelector('.modal-footer .modal-btn-primary');
+            if (save) {
+                save.setAttribute('form', 'cal-form');
+                save.setAttribute('type', 'submit');
+            }
+            const form = document.getElementById('cal-form');
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    submitForm(form);
+                });
+            }
+            const input = document.getElementById('cal-title');
+            if (input) input.focus();
+        }
+
+        function todayIso() {
+            const now = new Date();
+            return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+        }
+
+        function openCreate(date, hour) {
+            const start = hour === undefined ? '09:00' : pad(hour) + ':00';
+            const end = hour === undefined ? '10:00' : pad(Math.min(hour + 1, 23)) + ':00';
+            openForm('New event', CREATE_URL, {
+                title: '', date: date || todayIso(), start: start, end: end, repeat: 'none',
+            });
+        }
+
+        // the events of the page, so a click can open the right one
+        const EVENTS = JSON.parse(
+            (document.getElementById('calendar-events') || {}).textContent || '{}'
+        );
+
+        document.querySelectorAll('.cal-cell, .cal-daybody').forEach(function (cell) {
+            cell.addEventListener('click', function (e) {
+                if (e.target.closest('.cal-chip, .cal-block')) return;
+                // in the week view the hour comes from the line that was
+                // clicked, in the month view from the cell
+                const line = e.target.closest('.cal-hourline');
+                const hour = line ? line.dataset.hour : cell.dataset.hour;
+                openCreate(cell.dataset.date, hour === undefined ? undefined : parseInt(hour, 10));
+            });
+        });
+
+        const newBtn = document.getElementById('cal-new');
+        if (newBtn) {
+            newBtn.addEventListener('click', function () {
+                openCreate(todayIso());
+            });
+        }
+
+        document.querySelectorAll('.cal-chip, .cal-block, .cal-agenda-item').forEach(function (chip) {
+            chip.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                if (e.target.closest('.cal-eventlink')) return;
+                e.preventDefault();
+                chip.click();
+            });
+            chip.addEventListener('click', function (e) {
+                e.stopPropagation();
+                // the link opens in a new tab, the event opens the dialog
+                if (e.target.closest('.cal-eventlink')) return;
+                const event = EVENTS[chip.dataset.event];
+                if (!event) return;
+                const action = "/calendar/events/" + chip.dataset.event + "/";
+                const deleteButton = {
+                    text: 'Delete',
+                    className: 'modal-btn modal-btn-danger',
+                    callback: function () {
+                        const form = document.getElementById('cal-form');
+                        if (!form) return;
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'delete';
+                        input.value = '1';
+                        form.appendChild(input);
+                        form.requestSubmit();
+                    },
+                };
+                openForm(event.title, action, {
+                    title: event.title,
+                    date: event.date,
+                    start: event.start,
+                    end: event.end,
+                    repeat: event.repeat,
+                    url: event.url || '',
+                    pk: event.pk,
+                }, deleteButton);
+            });
+        });
+    })();
+</script>
+{% endblock %}

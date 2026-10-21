@@ -1459,6 +1459,10 @@
             <span class="nav-separator"></span>
             <a href="{% url 'research' %}" class="nav-link">Research</a>
         </div>
+        <div class="nav-item{% if request.resolver_match.url_name == 'calendar' %} active{% endif %}">
+            <span class="nav-separator"></span>
+            <a href="{% url 'calendar' %}" class="nav-link">Calendar</a>
+        </div>
         <div class="nav-item{% if request.resolver_match.url_name == 'settings' %} active{% endif %}">
             <span class="nav-separator"></span>
             <a href="{% url 'settings' %}" class="nav-link">Settings</a>

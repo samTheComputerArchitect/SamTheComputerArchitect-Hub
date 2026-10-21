@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'thumbnails',
     'research',
     'settings',
+    'cal',
 ]
 
 MIDDLEWARE = [
