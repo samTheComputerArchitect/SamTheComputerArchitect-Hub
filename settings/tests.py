@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import APIKey, EditorSetting
+from .models import APIKey, EditorSetting, GoogleCredential
 
 
 class ApiKeyTests(TestCase):
@@ -102,3 +102,53 @@ class EditorSettingTests(TestCase):
     def test_saving_the_editor_settings_requires_post(self):
         self.assertEqual(self.client.get(reverse('save_editor_settings')).status_code, 405)
         self.assertEqual(self.client.post(reverse('save_api_key'), {'provider': 'X', 'key': 'k'}).status_code, 200)
+
+
+class GoogleClientTests(TestCase):
+    """The oauth client of the hub saved on the settings page."""
+
+    def test_saving_the_client_stores_both_parts(self):
+        response = self.client.post(reverse('save_google_client'), {
+            'client_id': '123.apps.googleusercontent.com',
+            'client_secret': 'GOCSPX-secret',
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        row = GoogleCredential.objects.get()
+        self.assertEqual(row.client_id, '123.apps.googleusercontent.com')
+        self.assertEqual(row.client_secret, 'GOCSPX-secret')
+
+    def test_saving_the_client_overwrites_the_old_one(self):
+        self.client.post(reverse('save_google_client'), {
+            'client_id': 'a.apps.googleusercontent.com', 'client_secret': 'one',
+        })
+        self.client.post(reverse('save_google_client'), {
+            'client_id': 'b.apps.googleusercontent.com', 'client_secret': 'two',
+        })
+        self.assertEqual(GoogleCredential.objects.count(), 1)
+        self.assertTrue(GoogleCredential.objects.get().client_id.startswith('b'))
+
+    def test_both_fields_are_required(self):
+        response = self.client.post(
+            reverse('save_google_client'), {'client_id': 'only-the-id'}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'The client id and the secret are both required')
+
+    def test_the_status_reports_what_is_stored(self):
+        response = self.client.get(reverse('get_google_status'))
+        self.assertEqual(response.json(), {
+            'client_id': False, 'client_secret': False, 'connected': False,
+        })
+        GoogleCredential.load()
+        response = self.client.post(reverse('save_google_client'), {
+            'client_id': 'a.apps.googleusercontent.com', 'client_secret': 'one',
+        })
+        response = self.client.get(reverse('get_google_status'))
+        self.assertTrue(response.json()['client_id'])
+        row = GoogleCredential.objects.get()
+        row.refresh_token = 'connected-token'
+        row.save()
+        self.assertTrue(self.client.get(reverse('get_google_status')).json()['connected'])
+
+    def test_the_saving_requires_post(self):
+        self.assertEqual(self.client.get(reverse('save_google_client')).status_code, 405)

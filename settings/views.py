@@ -1,10 +1,38 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from .models import APIKey, EditorSetting
+from .models import APIKey, EditorSetting, GoogleCredential
 
 
 VALID_TABS = ('api_keys', 'models', 'editor')
+
+
+def get_google_status(request):
+    """What the meetings page needs to know about the Google side."""
+    row = GoogleCredential.load()
+    return JsonResponse({
+        'client_id': bool(row.client_id),
+        'client_secret': bool(row.client_secret),
+        'connected': bool(row.refresh_token),
+    })
+
+
+@require_POST
+def save_google_client(request):
+    """The client id and the secret, before Google can be connected."""
+    client_id = (request.POST.get('client_id') or '').strip()[:200]
+    client_secret = (request.POST.get('client_secret') or '').strip()[:500]
+    if not client_id or not client_secret:
+        return JsonResponse(
+            {'error': 'The client id and the secret are both required'},
+            status=400,
+        )
+    row = GoogleCredential.load()
+    row.client_id = client_id
+    row.client_secret = client_secret
+    row.save()
+    return JsonResponse({'status': 'success'})
+
 
 
 def editor_flag(value):

@@ -1,3 +1,7 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import APIKey, EditorSetting, GoogleCredential
+
+admin.site.register(APIKey)
+admin.site.register(GoogleCredential)
+admin.site.register(EditorSetting)

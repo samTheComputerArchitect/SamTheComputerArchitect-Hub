@@ -7,4 +7,6 @@ urlpatterns = [
     path('get-api-keys/', views.get_api_keys, name='get_api_keys'),
     path('editor-settings/', views.get_editor_settings, name='get_editor_settings'),
     path('save-editor-settings/', views.save_editor_settings, name='save_editor_settings'),
+    path('google-status/', views.get_google_status, name='get_google_status'),
+    path('save-google-client/', views.save_google_client, name='save_google_client'),
 ]

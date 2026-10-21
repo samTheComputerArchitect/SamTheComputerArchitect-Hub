@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block page_name %}Meetings{% endblock %}
+
+{% block page_subnav %}
+<style>
+    .meetings-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        min-height: calc(100vh - 43px - 41px);
+    }
+    .meetings-side {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+        padding: 20px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+    }
+    .meetings-main {
+        padding: 24px;
+        overflow-y: auto;
+    }
+    .meeting-new {
+        display: flex;
+        gap: 8px;
+    }
+    .meeting-new input {
+        flex: 1;
+        height: 34px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: 4px;
+        color: var(--text-primary);
+        padding: 0 10px;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        outline: none;
+    }
+    .meeting-new input:focus {
+        border-color: var(--color-primary);
+    }
+    .meetings-empty {
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+    .meeting-item {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .meeting-item-title {
+        font-size: 13px;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .meeting-item-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .meeting-btn {
+        font-size: 12px;
+        padding: 5px 10px;
+        border: 1px solid var(--border-light);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        text-decoration: none;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .meeting-btn:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+    .meeting-btn.danger:hover {
+        color: var(--color-danger);
+        border-color: var(--color-danger);
+    }
+    .meeting-link-chip {
+        font-size: 12px;
+        color: var(--color-primary-light);
+        text-decoration: none;
+        font-family: var(--font-mono);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+    .meetings-hint {
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--color-primary);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+    .meetings-hint.welcome {
+        border-left-color: var(--color-success);
+    }
+    .meetings-hint.trouble {
+        border-left-color: var(--color-danger);
+    }
+    .google-row {
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px;
+        font-size: 12px;
+    }
+    .google-row .meeting-btn {
+        width: 100%;
+        text-align: center;
+    }
+    .google-state {
+        color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .google-state.on {
+        color: var(--color-success);
+    }
+</style>
+
+{% endblock %}
+
+{% block content %}
+<div class="meetings-layout">
+    <aside class="meetings-side">
+        <div class="meeting-new">
+            <form method="post" action="{% url 'meetings_create' %}" style="display: contents;">
+                {% csrf_token %}
+                <input type="text" name="title" placeholder="New meeting..." maxlength="200" autocomplete="off">
+                <button type="submit" class="meeting-btn">Create</button>
+            </form>
+        </div>
+        {% for meeting in meetings %}
+            <div class="meeting-item">
+                <span class="meeting-item-title">{{ meeting.title }}</span>
+                <div class="meeting-item-row">
+                    <a class="meeting-btn" href="{% url 'meeting_page' meeting.pk %}">Enter the call</a>
+                    <form method="post" action="{% url 'meetings_delete' meeting.pk %}" style="display: contents;">
+                        {% csrf_token %}
+                        <button type="submit" class="meeting-btn danger">Delete</button>
+                    </form>
+                </div>
+                {% if meeting.meet_uri %}
+                    <div class="meeting-item-row">
+                        <a class="meeting-link-chip" href="{{ meeting.meet_uri }}" target="_blank" rel="noopener">{{ meeting.meet_uri }}</a>
+                    </div>
+                {% elif google_connected %}
+                    <form method="post" action="{% url 'meetings_link' meeting.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="meeting-btn">Try the Meet link again</button>
+                    </form>
+                {% endif %}
+            </div>
+        {% empty %}
+            <span class="meetings-empty">No meetings yet — name one above to start.</span>
+        {% endfor %}
+        <div class="google-row">
+            <div class="google-state{% if google_connected %} on{% endif %}">
+                {% if google_connected %}Google connected{% else %}Google not connected{% endif %}
+            </div>
+            {% if google_connected %}
+                <form method="post" action="{% url 'meetings_disconnect' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="meeting-btn danger">Disconnect Google</button>
+                </form>
+            {% else %}
+                <a class="meeting-btn" href="{% url 'meetings_connect' %}{% if not google_connected %}{% endif %}">Connect Google</a>
+            {% endif %}
+        </div>
+    </aside>
+    <section class="meetings-main">
+        {% if hint %}
+            <div class="meetings-hint {% if hint in 'connected,disconnected' %}welcome{% elif hint not in 'Title is required' %}trouble{% endif %}" style="margin-bottom: 20px; max-width: 560px;">
+                {% if hint == 'connected' %}
+                    Google connected. New meetings now carry a real meet.google.com link.
+                {% elif hint == 'disconnected' %}
+                    Google disconnected. The client id and secret are kept for next time.
+                {% elif hint == 'google-error' %}
+                    Google refused the meeting space. The meeting exists anyway — the link can be retried later.
+                {% elif hint == 'missing-client' %}
+                    The Google client id and secret are not saved yet. Enter them on Settings → API Keys.
+                {% elif hint == 'empty-code' %}
+                    Google came back without a code and the connection failed.
+                {% elif hint == 'bad-state' %}
+                    The state Google sent back did not match the page — the connection must be started again.
+                {% elif hint == 'no-client' %}
+                    The client id disappeared between the consent screen and the answer.
+                {% elif hint == 'connect-error' %}
+                    The connection to Google could not even start.
+                {% elif hint == 'Title is required' %}
+                    A meeting needs a name.
+                {% else %}
+                    {{ hint }}
+                {% endif %}
+            </div>
+        {% endif %}
+        <h1 style="font-size: 22px; margin-bottom: 10px;">Meetings</h1>
+        <p class="meetings-empty" style="max-width: 60ch; line-height: 1.8;">
+            Every meeting lives on its own page: one video grid, one row of buttons for the
+            camera, the microphone and the screen, and the people in the call on the right.
+            Connect Google and each meeting also gets a real meet.google.com link, for the
+            people who prefer the original.
+        </p>
+    </section>
+</div>
+
+{% endblock %}

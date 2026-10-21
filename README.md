@@ -12,7 +12,7 @@
 **A self-hosted workspace for your projects, with the tools around them built in.** Keep
 everything in one place and reach for the tool you need without switching apps — a thumbnail
 editor with snapping guides, a freeform notes canvas, a research workbench for hypotheses and
-experiments, and a calendar to put the work on.
+experiments, and a calendar and a call page to put the work on.
 
 Inspired by [NeuralNine](https://github.com/samTheComputerArchitect) and the way it works:
 small, focused tools for each part of the work, one after another, all in the same place.
@@ -26,8 +26,9 @@ as two separate steps, with every card showing which one you are at.
 | **Notes** | An infinite canvas for ink, sticky notes, headings and images, organised into notebooks → sections → tabs. |
 | **Research** | Projects with tags and statuses, live search, experiments with hypotheses, conclusions and file attachments — and a LaTeX **paper studio** that compiles and previews the paper next to the editor. |
 | **Calendar** | A month, a week and an agenda view, one place for the dates of the work. |
+| **Meetings** | A call page with the camera, the microphone, the screen and the people in the call — and a real `meet.google.com` link on every meeting, made with the Google Meet API. |
 | **Videos / Editing** | Placeholders for the next two parts of the workflow. |
-| **Settings** | API key storage (Ollama Cloud today), a models panel and the editor preferences (vim mode, the `hjkl` motions). |
+| **Settings** | API key storage (Ollama Cloud today), the Google Meet OAuth client, a models panel and the editor preferences (vim mode, the `hjkl` motions). |
 
 Everything runs locally on SQLite, with **no build step and no node_modules** — the front end
 is hand written HTML, CSS and JavaScript served straight from `templates/` and `static/`.
@@ -176,6 +177,36 @@ One page for the dates around the work, rendered on the server with no client-si
 - **Events that run over midnight** are allowed — an end time at or before the start is
   read as the same time on the next day.
 
+### Meetings
+
+One page per meeting: a video grid, a row of buttons, and the people in the call on the
+right, all in the app's own theme with no extra libraries.
+
+- **The call is in the browser** — a WebRTC mesh of plain JavaScript, camera and
+  microphone with the standard `getUserMedia`, screenshare with the standard
+  `getDisplayMedia`. No dependency, no bundler, nothing vendored.
+- **The buttons** — camera on/off, microphone on/muted, share the screen (it goes to the
+  big tile and out to the others), copy the link of the page to invite someone, and a red
+  *Leave*. The camera stops and the page unhooks the moment the tab leaves.
+- **The people** — every participant is a tile and a row: the name, whether the camera is
+  off and the badge that says the microphone is muted, and the tab that shares. A chosen
+  name travels with the call; it stays in the browser for the next time.
+- **The signalling is http** — every page posts the offers, answers and ice candidates it
+  wants to send, and reads its own queue back about once a second. No websocket server,
+  no new packages: the dev server is everything a call needs.
+- **The Google side** — connect the hub to Google once (the *Connect Google* button) and
+  every new meeting gets a real `meet.google.com` link minted by the Meet REST API
+  (`spaces.create`, the `meetings.space.created` scope), for the people who would rather
+  be in the actual Meet. Tokens are renewed by the server; a link can be retried on any
+  row that has none.
+- **The credentials** — the client id and the secret live on *Settings → API Keys*, and
+  the refresh token in the same row of the database, never sent back to the page.
+
+To connect Google you need its *Web application* OAuth client (the Meet API takes OAuth
+2.0 user authorization only — no API keys), with the access type offline and the redirect
+uri `http://127.0.0.1:8000/meetings/oauth/callback/`. While the app is in the testing
+status of the consent screen, the tokens want a re-consent every 7 days.
+
 ## Keyboard shortcuts
 
 ### Thumbnail editor
@@ -251,6 +282,7 @@ SamTheComputerArchitect-Hub/
 │   ├── migrations/               # …and the ResearchPaper model (0008)
 │   └── templatetags/             # truncate_chars, get_item
 ├── cal/                          # Calendar app (month, week, agenda)
+├── meetings/                     # Meetings app: the call page and the Google Meet link
 ├── settings/                     # Settings app (API keys, editor preferences)
 │   └── migrations/               # …and the EditorSetting model (0002)
 ├── templates/                    # Every page, one folder per app
@@ -258,6 +290,7 @@ SamTheComputerArchitect-Hub/
 │   ├── research/                 # research, detail, experiment, experiment_form,
 │   │                             # experiment_view, experiment_file, paper
 │   ├── calendar/                # The calendar month, week and agenda views
+│   ├── meetings/                # The meetings list and the call page
 │   ├── notes/                    # The notes canvas
 │   ├── settings/                 # The settings pages
 │   └── thumbnails/               # thumbnails, editor
@@ -289,10 +322,11 @@ The dev server reloads on changes to the Python code. Django 6.1 caches the comp
 templates, so **a changed template needs a restart** — `touch research/views.py` is enough to
 make the server pick it up again.
 
-`python manage.py test` runs the suite — 322 tests covering the thumbnail API (element CRUD,
+`python manage.py test` runs the suite — 357 tests covering the thumbnail API (element CRUD,
 uploads, colour validation, ownership), the notes API, the research pages (search, filters,
 the experiment workflow, the paper studio, the file viewer), the calendar (views, time
-zones, repeats, the event API) and the settings. Every fix that went in came with a
+zones, repeats, the event API), the meetings (the call, the signalling, the Google oauth
+and Meet link) and the settings. Every fix that went in came with a
 regression test that pins it.
 
 Pull requests are welcome. Keep the front end dependency-free — if it can be done in plain

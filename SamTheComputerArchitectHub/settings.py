@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'research',
     'settings',
     'cal',
+    'meetings',
 ]
 
 MIDDLEWARE = [

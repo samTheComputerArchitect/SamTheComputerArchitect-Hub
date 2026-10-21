@@ -209,7 +209,7 @@
     <div id="api_keys" class="tab-content {% if active_tab == 'api_keys' %}active{% endif %}">
         <h2 style="margin: 24px 24px 20px 24px; font-size: 24px;">API Keys</h2>
         
-        <div class="settings-grid">
+        <div class="settings-grid" style="grid-template-columns: repeat(2, 1fr);">
             <div class="api-key-item">
                 <label style="font-size:13px; color:var(--text-muted);">Ollama Cloud API Key</label>
                 <div class="api-key-row">
@@ -221,6 +221,24 @@
                 </div>
 
                 <button type="button" class="save-btn" id="save-ollama">Save Key</button>
+            </div>
+
+            <div class="api-key-item">
+                <label style="font-size:13px; color:var(--text-muted);">Google Meet (OAuth client)</label>
+                <div class="api-key-row">
+                    <div class="api-key-container">
+                        <input type="password" id="google-client-id" class="api-key-field" placeholder="Client ID (...apps.googleusercontent.com)" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+                    </div>
+                </div>
+                <div class="api-key-row">
+                    <div class="api-key-container">
+                        <input type="password" id="google-client-secret" class="api-key-field" placeholder="Client secret" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
+                    </div>
+                </div>
+                <div class="api-key-row">
+                    <span id="google-state" style="font-size:12px; color:var(--text-muted);">Checking…</span>
+                </div>
+                <button type="button" class="save-btn" id="save-google">Save client</button>
             </div>
         </div>
     </div>
@@ -424,6 +442,69 @@
     });
 
     loadApiKeys();
+
+    const GOOGLE_STATUS_URL = "{% url 'get_google_status' %}";
+    const GOOGLE_SAVE_URL = "{% url 'save_google_client' %}";
+    const googleId = document.getElementById('google-client-id');
+    const googleSecret = document.getElementById('google-client-secret');
+    const googleState = document.getElementById('google-state');
+
+    async function loadGoogleStatus() {
+        if (!googleState) return;
+        try {
+            const response = await fetch(GOOGLE_STATUS_URL);
+            if (!response.ok) return;
+            const status = await response.json();
+            if (status.client_id && googleId.value === '') {
+                // the id is saved on the server: the field shows that, and the
+                // secret never travels back out of the database at all
+                googleId.value = '(saved on the server)';
+            }
+            googleState.textContent =
+                status.connected ? 'Connected to Google'
+                : (status.client_id ? 'Client saved — connect Google from the Meetings page'
+                : 'Not configured');
+            googleState.style.color =
+                status.connected ? 'var(--color-success)' : 'var(--text-muted)';
+        } catch (e) {
+            console.error('Failed to load Google status', e);
+        }
+    }
+
+    document.getElementById('save-google').addEventListener('click', async function() {
+        const btn = this;
+        if (!googleId.value.trim() || !googleSecret.value.trim()) {
+            showModal('Error', 'The client id and the secret are both required');
+            return;
+        }
+        btn.disabled = true;
+        const body = new URLSearchParams();
+        body.append('client_id', googleId.value.trim());
+        body.append('client_secret', googleSecret.value.trim());
+        body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+        try {
+            const response = await fetch(GOOGLE_SAVE_URL, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+            });
+            if (response.ok) {
+                showModal('Success', 'The Meet client is saved. Connect Google from the Meetings page.');
+                googleId.value = '';
+                googleSecret.value = '';
+                loadGoogleStatus();
+            } else {
+                const data = await response.json().catch(() => null);
+                showModal('Error', (data && data.error) || 'Failed to save');
+            }
+        } catch (e) {
+            showModal('Error', 'An error occurred while saving');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    loadGoogleStatus();
 </script>
 {% endblock %}
 

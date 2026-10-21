@@ -1,0 +1,633 @@
+{% extends 'base.html' %}
+
+{% block page_name %}{{ meeting.title }}{% endblock %}
+
+{% block content %}
+<style>
+    .call-layout {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        min-height: calc(100vh - 43px - 41px);
+    }
+    .call-stage {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .call-tiles {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-auto-rows: minmax(220px, 1fr);
+        gap: 10px;
+        padding: 14px;
+        min-height: 0;
+        background: var(--bg-secondary);
+    }
+    .call-tiles .tile.now-sharing {
+        grid-column: span 2;
+        grid-row: span 2;
+    }
+    .tile {
+        position: relative;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .tile video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: var(--bg-primary);
+    }
+    .tile.now-sharing video {
+        object-fit: contain;
+    }
+    .tile.cam-off video {
+        display: none;
+    }
+    .tile-glyph {
+        font-size: 34px;
+        color: var(--text-muted);
+        position: absolute;
+        pointer-events: none;
+    }
+    .tile-name {
+        position: absolute;
+        left: 8px;
+        bottom: 8px;
+        font-size: 12px;
+        color: var(--text-primary);
+        background: rgba(0, 0, 0, 0.55);
+        padding: 3px 8px;
+        border-radius: 4px;
+        pointer-events: none;
+    }
+    .tile-badges {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        display: flex;
+        gap: 4px;
+        pointer-events: none;
+    }
+    .tile-badge {
+        font-size: 11px;
+        color: var(--text-muted);
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 2px 6px;
+    }
+    .tile-badge.off {
+        color: var(--color-danger-light);
+    }
+    .call-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        height: 64px;
+        border-top: 1px solid var(--border);
+        background: var(--bg-primary);
+        padding: 0 14px;
+    }
+    .call-btn {
+        min-width: 42px;
+        height: 42px;
+        border-radius: 50% 8px;
+        border: 1px solid var(--border-light);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 16px;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .call-btn:hover {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+    .call-btn.off {
+        color: var(--color-danger-light);
+        border-color: var(--color-danger);
+    }
+    .call-btn.active {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+        background: var(--color-primary-soft);
+    }
+    .call-leave {
+        background: var(--color-danger);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        height: 42px;
+        padding: 0 20px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        transition: opacity 0.15s;
+    }
+    .call-leave:hover {
+        opacity: 0.9;
+    }
+    .call-people {
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    .people-head {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 14px 16px 8px;
+    }
+    .people-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border);
+    }
+    .people-item .people-badges {
+        display: flex;
+        gap: 6px;
+        font-size: 11px;
+    }
+    .people-badges .tile-badge {
+        border: none;
+        background: transparent;
+        padding: 0;
+    }
+    .people-link {
+        border-top: 1px solid var(--border);
+        margin-top: auto;
+        padding: 14px 16px;
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .people-link a {
+        color: var(--color-primary-light);
+        text-decoration: none;
+        font-family: var(--font-mono);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .call-waiting {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-size: 13px;
+        pointer-events: none;
+    }
+</style>
+
+<div class="call-layout">
+    <div class="call-stage">
+        <div id="tiles" class="call-tiles">
+            <div class="call-waiting" id="waiting">Connecting the camera…</div>
+            <div class="tile" id="local-tile">
+                <video id="local-video" autoplay playsinline muted></video>
+                <span class="tile-glyph" id="local-glyph" style="display: none;">⬤</span>
+                <span class="tile-name" id="local-name">You</span>
+                <span class="tile-badges" id="local-badges"></span>
+            </div>
+        </div>
+        <div class="call-bar">
+            <button type="button" class="call-btn" id="btn-cam" title="Camera on or off">◉</button>
+            <button type="button" class="call-btn" id="btn-mic" title="Microphone on or muted">🎙</button>
+            <button type="button" class="call-btn" id="btn-screen" title="Share your screen">▣</button>
+            <button type="button" class="call-btn" id="btn-copy" title="Copy the link to this call">↗</button>
+            <a class="call-leave" id="btn-leave" href="{% url 'meetings' %}">Leave</a>
+        </div>
+    </div>
+    <aside class="call-people">
+        <div class="people-head">In the call</div>
+        <div class="people-item">
+            <span id="you-label">You</span>
+            <span class="people-badges" id="you-badges"></span>
+        </div>
+        <div id="people-list"></div>
+        <div class="people-link">
+            <span>Invite by the link of this page</span>
+            <a href="#" id="share-me" onclick="return copyLocation();">…</a>
+            {% if meeting.meet_uri %}
+            <span style="margin-top: 6px;">Or the real Meet:</span>
+            <a href="{{ meeting.meet_uri }}" target="_blank" rel="noopener">{{ meeting.meet_uri }}</a>
+            {% endif %}
+        </div>
+    </aside>
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const MEETING_PK = "{{ meeting.pk }}";
+const SEND_URL = "/meetings/{{ meeting.pk }}/send/";
+const SIGNAL_URL = "/meetings/{{ meeting.pk }}/signal/";
+const ME = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+const PEERS = {};          // client id -> {pc, tile, video, name, cam, mic, screen}
+const MY = { cam: false, mic: false, screen: false };
+let myStream = null;       // camera + audio
+let myVideoTrack = null;   // what peers see: the camera, or the screen
+const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
+let cursor = 0;            // the last signal the page has read
+let shareStream = null;    // the display capture while it is on
+
+async function postSignal(type, to, payload) {
+    const body = new URLSearchParams();
+    body.append('me', ME);
+    body.append('type', type);
+    body.append('to', to || '');
+    if (payload !== undefined) body.append('payload', JSON.stringify(payload));
+    body.append('csrfmiddlewaretoken', CSRF);
+    try {
+        await fetch(SEND_URL, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF },
+            body: body.toString(),
+        });
+    } catch (e) { /* the next heartbeat carries the state anyway */ }
+}
+
+async function enableLocalMedia() {
+    try {
+        myStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('local-video').srcObject = myStream;
+        myVideoTrack = myStream.getVideoTracks()[0] || null;
+        MY.cam = !!myVideoTrack;
+        MY.mic = myStream.getAudioTracks().length > 0;
+        document.getElementById('waiting').remove();
+    } catch (e) {
+        MY.cam = false;
+        MY.mic = false;
+        document.getElementById('waiting').textContent =
+            'The camera is not available — the call still works for the others.';
+    }
+    applyLocalTile();
+    broadcastState();
+}
+
+function applyLocalTile() {
+    const tile = document.getElementById('local-tile');
+    const glyph = document.getElementById('local-glyph');
+    tile.classList.toggle('cam-off', !MY.cam && !MY.screen);
+    glyph.style.display = (MY.cam || MY.screen) ? 'none' : '';
+    document.getElementById('btn-cam').classList.toggle('off', !MY.cam);
+    document.getElementById('btn-mic').classList.toggle('off', !MY.mic);
+    document.getElementById('btn-screen').classList.toggle('active', !!MY.screen);
+    badges(document.getElementById('local-badges'), MY);
+    badges(document.getElementById('you-badges'), MY);
+}
+
+function badges(node, state) {
+    node.innerHTML = '';
+    const mic = document.createElement('span');
+    mic.className = 'tile-badge' + (state.mic ? '' : ' off');
+    mic.textContent = state.mic ? '🎙' : 'muted';
+    node.appendChild(mic);
+    if (state.screen) {
+        const share = document.createElement('span');
+        share.className = 'tile-badge';
+        share.textContent = '▣ sharing';
+        node.appendChild(share);
+    }
+}
+
+function broadcastState() {
+    postSignal('state', '', state());
+}
+
+function state() {
+    return { cam: MY.cam, mic: MY.mic, screen: MY.screen };
+}
+
+/* one peer: connection, tile, statuses */
+
+function ensurePeer(peer) {
+    if (PEERS[peer]) return PEERS[peer];
+    const entry = { pc: null, parts: null, name: null, cam: true, mic: true, screen: false };
+    entry.parts = tileFor(peer);
+    PEERS[peer] = entry;
+    return entry;
+}
+
+function tileFor(peer) {
+    const tiles = document.getElementById('tiles');
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.dataset.peer = peer;
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    tile.appendChild(video);
+    const glyph = document.createElement('span');
+    glyph.className = 'tile-glyph';
+    glyph.textContent = '⬤';
+    tile.appendChild(glyph);
+    const name = document.createElement('span');
+    name.className = 'tile-name';
+    name.textContent = 'Guest';
+    tile.appendChild(name);
+    const stateBadges = document.createElement('span');
+    stateBadges.className = 'tile-badges';
+    tile.appendChild(stateBadges);
+    tiles.appendChild(tile);
+    return { tile, video, glyph, name, stateBadges };
+}
+
+function updatePeerTile(peer) {
+    const entry = PEERS[peer];
+    if (!entry) return;
+    entry.parts.tile.classList.toggle('now-sharing', !!entry.screen);
+    entry.parts.tile.classList.toggle('cam-off', !entry.cam && !entry.screen);
+    entry.parts.glyph.style.display = (entry.cam || entry.screen) ? 'none' : '';
+    badges(entry.parts.stateBadges, entry);
+    renderPeople();
+}
+
+function newConnection(peer) {
+    const entry = ensurePeer(peer);
+    const pc = new RTCPeerConnection(ICE);
+    entry.pc = pc;
+    pc.onicecandidate = (event) => {
+        if (event.candidate) postSignal('ice', peer, event.candidate);
+    };
+    pc.ontrack = (event) => {
+        entry.parts.video.srcObject = event.streams[0];
+        entry.parts.video.muted = false;
+        unlockSound();
+    };
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed') {
+            closePeer(peer);
+            if (ME < peer && myVideoTrack) {  // the smaller id offers again
+                secondChance(peer);
+            }
+        }
+    };
+    if (myStream) {
+        for (const track of myStream.getTracks()) pc.addTrack(track, myStream);
+    }
+    return entry;
+}
+
+function secondChance(peer) {
+    setTimeout(() => { offerTo(peer).catch(() => {}); }, 1200);
+}
+
+function closePeer(peer) {
+    const entry = PEERS[peer];
+    if (!entry) return;
+    try { entry.pc.close(); } catch (e) {}
+    entry.parts.tile.remove();
+    delete PEERS[peer];
+    renderPeople();
+}
+
+/* the offers, answers and candidates of the mesh */
+
+async function offerTo(peer) {
+    const entry = newConnection(peer);
+    const offer = await entry.pc.createOffer();
+    await entry.pc.setLocalDescription(offer);
+    await postSignal('offer', peer, entry.pc.localDescription);
+}
+
+async function answerTo(peer, offer) {
+    const entry = newConnection(peer);
+    if (entry.pc.currentRemoteDescription && entry.pc.currentRemoteDescription.sdp) {
+        // the old offer of the same peer: the last one wins
+        try { await entry.pc.setRemoteDescription(offer); } catch (e) { return; }
+    } else {
+        try { await entry.pc.setRemoteDescription(offer); } catch (e) { return; }
+    }
+    const answer = await entry.pc.createAnswer();
+    await entry.pc.setLocalDescription(answer);
+    await postSignal('answer', peer, entry.pc.localDescription);
+}
+
+async function acceptMessage(message) {
+    const from = message.from;
+    const type = message.type;
+    const payload = message.payload;
+    if (type === 'offer') {
+        await answerTo(from, payload);
+    } else if (type === 'answer') {
+        const entry = PEERS[from];
+        if (entry && entry.pc.signalingState !== 'stable') {
+            try { await entry.pc.setRemoteDescription(payload); } catch (e) {}
+        }
+    } else if (type === 'ice') {
+        const entry = PEERS[from];
+        if (entry) {
+            try { await entry.pc.addIceCandidate(payload); } catch (e) {}
+        }
+    } else if (type === 'state') {
+        const entry = ensurePeer(from);
+        entry.cam = !!payload.cam;
+        entry.mic = !!payload.mic;
+        entry.screen = !!payload.screen;
+        updatePeerTile(from);
+    } else if (type === 'name') {
+        const entry = ensurePeer(from);
+        entry.name = String(payload.name || '').slice(0, 30) || 'Guest';
+        entry.parts.name.textContent = entry.name;
+        renderPeople();
+    }
+}
+
+/* the people column */
+
+function renderPeople() {
+    const list = document.getElementById('people-list');
+    list.innerHTML = '';
+    for (const [peer, entry] of Object.entries(PEERS)) {
+        const row = document.createElement('div');
+        row.className = 'people-item';
+        const name = document.createElement('span');
+        name.textContent = entry.name || 'Guest';
+        row.appendChild(name);
+        const node = document.createElement('span');
+        node.className = 'people-badges';
+        node.style.display = 'flex';
+        node.style.gap = '6px';
+        badges(node, entry);
+        row.appendChild(node);
+        list.appendChild(row);
+    }
+    const waiting = document.getElementById('waiting');
+    if (waiting) waiting.style.display = 'none';
+}
+
+/* the plumbing of one poll */
+
+async function heartbeat() {
+    try {
+        const answer = await fetch(SIGNAL_URL + `?me=${encodeURIComponent(ME)}&cursor=${cursor}`);
+        if (!answer.ok) return;
+        const data = await answer.json();
+        const known = new Set(data.roster);
+        for (const peer of Object.keys(PEERS)) {
+            if (!known.has(peer)) closePeer(peer);
+        }
+        for (const peer of data.roster) {
+            if (peer === ME) continue;
+            if (!PEERS[peer] && ME < peer) {
+                // the page with the smaller id is the offerer of the pair
+                offerTo(peer).catch(() => {});
+            }
+        }
+        for (const message of data.messages) {
+            if (message.id > cursor) cursor = message.id;
+            await acceptMessage(message);
+        }
+        // the state travels again now and then, so a page that joined late
+        // still learns whether the others have their cameras off
+        polls = (polls + 1) % 5;
+        if (polls === 0) {
+            broadcastName();
+            postSignal('state', '', state());
+        }
+    } catch (e) { /* the dev server is down for a moment; try again */ }
+}
+
+let polls = 0;
+
+async function broadcastName() {
+    const stored = localStorage.getItem('meetings-name') || 'Guest';
+    document.getElementById('local-name').textContent = stored + ' (you)';
+    document.getElementById('you-label').textContent = stored + ' (you)';
+    await postSignal('name', '', { name: stored });
+}
+
+/* sound: browsers start a call silent until the first click */
+
+let soundUnlocked = false;
+function unlockSound() {
+    if (soundUnlocked) return;
+    const turn = () => {
+        soundUnlocked = true;
+        for (const entry of Object.values(PEERS)) {
+            if (entry.video) entry.video.muted = false;
+        }
+        document.removeEventListener('pointerdown', turn);
+    };
+    document.addEventListener('pointerdown', turn);
+}
+
+/* the buttons */
+
+document.getElementById('btn-cam').addEventListener('click', () => {
+    MY.cam = !MY.cam;
+    if (myVideoTrack && myVideoTrack.kind === 'video') myVideoTrack.enabled = MY.cam;
+    applyLocalTile();
+    broadcastState();
+});
+
+document.getElementById('btn-mic').addEventListener('click', () => {
+    MY.mic = !MY.mic;
+    if (myStream) {
+        for (const track of myStream.getAudioTracks()) track.enabled = MY.mic;
+    }
+    applyLocalTile();
+    broadcastState();
+});
+
+document.getElementById('btn-screen').addEventListener('click', async () => {
+    try {
+        if (!shareStream) {
+            shareStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const track = shareStream.getVideoTracks()[0];
+            track.onended = () => stopShare();
+            myVideoTrack = track;
+            MY.screen = true;
+            document.getElementById('local-video').srcObject = shareStream;
+        } else {
+            stopShare();
+        }
+        for (const entry of Object.values(PEERS)) {
+            if (entry.pc) {
+                for (const sender of entry.pc.getSenders()) {
+                    if (sender.track && sender.track.kind === 'video') {
+                        await sender.replaceTrack(myVideoTrack);
+                    } else if (sender.track === null && myVideoTrack) {
+                        sender.replaceTrack(myVideoTrack).catch(() => {});
+                    }
+                }
+            }
+        }
+        applyLocalTile();
+        broadcastState();
+    } catch (e) { /* cancelled or blocked: the screen flag stays as it was */ }
+});
+
+async function stopShare() {
+    if (shareStream) {
+        for (const track of shareStream.getTracks()) track.stop();
+        shareStream = null;
+    }
+    MY.screen = false;
+    if (myStream && myStream.getVideoTracks()[0]) {
+        myVideoTrack = myStream.getVideoTracks()[0];
+        myVideoTrack.enabled = MY.cam;
+        document.getElementById('local-video').srcObject = myStream;
+    } else {
+        myVideoTrack = null;
+    }
+    for (const entry of Object.values(PEERS)) {
+        if (entry.pc) {
+            for (const sender of entry.pc.getSenders()) {
+                if (sender.track && sender.track.kind === 'video') {
+                    await sender.replaceTrack(myVideoTrack).catch(() => {});
+                }
+            }
+        }
+    }
+    applyLocalTile();
+    broadcastState();
+}
+
+function copyLocation() {
+    navigator.clipboard.writeText(window.location.href);
+    return false;
+}
+
+document.getElementById('btn-copy').addEventListener('click', copyLocation);
+document.getElementById('share-me').textContent = window.location.host + window.location.pathname;
+
+window.addEventListener('pagehide', () => {
+    if (navigator.sendBeacon) {
+        const body = new FormData();
+        body.append('me', ME);
+        body.append('type', 'bye');
+        body.append('csrfmiddlewaretoken', CSRF);
+        navigator.sendBeacon(SEND_URL, body);
+    }
+});
+
+enableLocalMedia().then(() => {
+    broadcastName();
+    heartbeat();
+    setInterval(heartbeat, 800);
+});
+</script>
+{% endblock %}

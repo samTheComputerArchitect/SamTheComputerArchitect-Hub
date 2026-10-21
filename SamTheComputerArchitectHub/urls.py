@@ -13,4 +13,5 @@ urlpatterns = [
     path('research/', include('research.urls')),
     path('settings/', include('settings.urls')),
     path('calendar/', include('cal.urls')),
+    path('meetings/', include('meetings.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
