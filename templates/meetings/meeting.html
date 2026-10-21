@@ -206,10 +206,22 @@
         font-size: 13px;
         pointer-events: none;
     }
+    .call-note {
+        padding: 10px 14px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--bg-primary);
+        border-bottom: 1px solid var(--border);
+    }
 </style>
 
 <div class="call-layout">
     <div class="call-stage">
+        <div class="call-note">
+            This page is one room and the Meet link is another — Google does not let the two
+            share their video, so a person joining meet.google.com will never appear here.
+            The grid below holds whoever opened this page.
+        </div>
         <div id="tiles" class="call-tiles">
             <div class="call-waiting" id="waiting">Connecting the camera…</div>
             <div class="tile" id="local-tile">

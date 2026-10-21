@@ -201,6 +201,11 @@ right, all in the app's own theme with no extra libraries.
   joins without knocking, since admission requests would otherwise wait for the organizer
   inside Meet itself. Tokens are renewed by the server; a link can be retried on any
   row that has none.
+- **Two links, two rooms** — the page of the meeting and the meet.google.com link are two
+  separate calls: Google does not let a third-party page carry Meet's video (its only
+  door being the developer-preview Media API), so a person who joined the Meet link will
+  never appear in the grid of the call page, and the other way round. The call page says
+  so above the grid.
 - **The credentials** — the client id and the secret live on *Settings → API Keys*, and
   the refresh token in the same row of the database, never sent back to the page.
 
